@@ -1,8 +1,8 @@
 *
-!test
 !*.c
 !*.h
-!Makefile
 !*.sh
-!*.txt
-.idea
+!test
+test/*.txt
+!test/text.txt
+!test/Makefile

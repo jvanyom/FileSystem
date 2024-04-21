@@ -1,7 +1,5 @@
 #include "basic_files.h"
 
-const static char empty_buffer[BLOCK_SIZE] = {0};
-
 /**
  * Divide dos números redondeando hacia arriba.
  *
@@ -54,10 +52,11 @@ int init_super_block(unsigned int total_blocks, unsigned int total_inodes) {
 
 int init_bitmap() {
     struct SuperBlock sb;
+    if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
-    if (read_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
-
-    const int metadata_block_size = bitmap_size(sb.totalBlocks) + inodes_size(sb.totalINodes) + SUPER_BLOCKS_PER_BLOCK;
+    const int metadata_block_size = bitmap_size(sb.totalBlocks)
+                                    + inodes_size(sb.totalINodes)
+                                    + SUPER_BLOCKS_PER_BLOCK;
 
     const int metadata_bytes = metadata_block_size / BYTE_LENGTH;
     const int metadata_extra_bits = metadata_block_size % BYTE_LENGTH;
@@ -69,24 +68,22 @@ int init_bitmap() {
 
     memset(bitmap, FULL_BYTE, metadata_bytes);
     memset(bitmap + metadata_bytes + 1, EMPTY_BYTE, bitmap_byte_size - metadata_bytes);
-
     bitmap[metadata_bytes] = FULL_BYTE << (BYTE_LENGTH - metadata_extra_bits);
 
     for (int i = 0; i < bitmap_block_size; ++i) {
-        if (write_block(sb.bitMapFirstBlock + i, &bitmap[i * BLOCK_SIZE]) == FAILURE) return FAILURE;
+        if (write_block(sb.bitMapFirstBlock + i, &bitmap[i * BLOCK_SIZE]) < 0) return FAILURE;
     }
 
     sb.totalFreeBlocks -= metadata_block_size;
 
-    if (write_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
+    if (write_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     return SUCCESS;
 }
 
 int init_inodes() {
     struct SuperBlock sb;
-
-    if (read_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
+    if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     struct INode inodes[INODES_PER_BLOCK];
 
@@ -95,12 +92,12 @@ int init_inodes() {
     for (unsigned int i = sb.iNodesFirstBlock; i <= sb.iNodesLastBlock; ++i) {
         for (int j = 0; j < INODES_PER_BLOCK; ++j) {
             inodes[j].directPointers[0] = next_inode++;
-            inodes[j].type = FREE_INODE;
+            inodes[j].metadata.type = FREE_INODE;
         }
 
         if (i == sb.iNodesLastBlock) inodes[INODES_PER_BLOCK - 1].directPointers[0] = UINT_MAX;
 
-        if (write_block(i, inodes) == FAILURE) return FAILURE;
+        if (write_block(i, inodes) < 0) return FAILURE;
     }
 
     return SUCCESS;
@@ -108,15 +105,13 @@ int init_inodes() {
 
 int set_block_state(unsigned int physical_block, unsigned int state) {
     struct SuperBlock sb;
-
-    if (read_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
+    if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     const unsigned int block_byte = physical_block / BYTE_LENGTH;
     const unsigned int absolute_block = sb.bitMapFirstBlock + (block_byte / BLOCK_SIZE);
 
     unsigned char bitmap[BLOCK_SIZE];
-
-    if (read_block(absolute_block, bitmap) == FAILURE) return FAILURE;
+    if (read_block(absolute_block, bitmap) < 0) return FAILURE;
 
     const unsigned char mask = BIT7 >> (physical_block % BYTE_LENGTH);
 
@@ -124,30 +119,27 @@ int set_block_state(unsigned int physical_block, unsigned int state) {
 
     *byte_to_modify = state ? *byte_to_modify | mask : *byte_to_modify & ~mask;
 
-    if (write_block(absolute_block, &bitmap) == FAILURE) return FAILURE;
+    if (write_block(absolute_block, &bitmap) < 0) return FAILURE;
 
     return SUCCESS;
 }
 
 char get_block_state(unsigned int physical_block) {
     struct SuperBlock sb;
-
-    if (read_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
+    if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     const unsigned int block_byte = physical_block / BYTE_LENGTH;
     const unsigned int absolute_block = sb.bitMapFirstBlock + (block_byte / BLOCK_SIZE);
 
     unsigned char bitmap[BLOCK_SIZE];
-
-    if (read_block(absolute_block, bitmap) == FAILURE) return FAILURE;
+    if (read_block(absolute_block, bitmap) < 0) return FAILURE;
 
     return (char) ((bitmap[block_byte % BLOCK_SIZE] & (BIT7 >> physical_block % BYTE_LENGTH)) > 0);
 }
 
 int reserve_block() {
     struct SuperBlock sb;
-
-    if (read_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
+    if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     if (sb.totalFreeBlocks == 0) return FAILURE;
 
@@ -156,14 +148,16 @@ int reserve_block() {
     int bitmap_block = -1;
 
     unsigned char bitmap[BLOCK_SIZE];
-    unsigned char aux_bitmap[BLOCK_SIZE];
 
-    memset(aux_bitmap, FULL_BYTE, BLOCK_SIZE);
+    unsigned char full_block[BLOCK_SIZE];
+    memset(full_block, FULL_BYTE, BLOCK_SIZE);
+
+    const unsigned char empty_block[BLOCK_SIZE] = {0};
 
     do {
-        if (read_block(sb.bitMapFirstBlock + ++bitmap_block, bitmap) == FAILURE) return FAILURE;
+        if (read_block(sb.bitMapFirstBlock + ++bitmap_block, bitmap) < 0) return FAILURE;
 
-    } while (memcmp(bitmap, aux_bitmap, BLOCK_SIZE) == 0 && bitmap_block < bitmap_block_length);
+    } while (memcmp(bitmap, full_block, BLOCK_SIZE) == 0 && bitmap_block < bitmap_block_length);
 
     for (unsigned int byte = 0; byte < BLOCK_SIZE; ++byte) {
         if (bitmap[byte] == FULL_BYTE) continue;
@@ -174,13 +168,12 @@ int reserve_block() {
 
         const unsigned int block_position = (bitmap_block * BLOCK_SIZE + byte) * BYTE_LENGTH + bit;
 
-        if (set_block_state(block_position, BUSY_BLOCK) == FAILURE) return FAILURE;
+        if (set_block_state(block_position, BUSY_BLOCK) < 0) return FAILURE;
 
         sb.totalFreeBlocks--;
 
-        if (write_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
-
-        if (write_block(block_position, empty_buffer) == FAILURE) return FAILURE;
+        if (write_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
+        if (write_block(block_position, empty_block) < 0) return FAILURE;
 
         return (int) block_position;
     }
@@ -190,48 +183,43 @@ int reserve_block() {
 
 int free_block(unsigned int physical_block) {
     struct SuperBlock sb;
-
-    if (read_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
+    if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     if (sb.totalBlocks == sb.totalFreeBlocks) return (int) physical_block;
 
-    if (set_block_state(physical_block, FREE_BLOCK) == FAILURE) return FAILURE;
+    if (set_block_state(physical_block, FREE_BLOCK) < 0) return FAILURE;
 
     sb.totalFreeBlocks++;
 
-    if (write_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
+    if (write_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     return (int) physical_block;
 }
 
 int write_inode(unsigned int inode_position, struct INode *inode) {
     struct SuperBlock sb;
-
-    if (read_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
+    if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     const unsigned int block = sb.iNodesFirstBlock + inode_position / INODES_PER_BLOCK;
 
     struct INode inodes[INODES_PER_BLOCK];
-
-    if (read_block(block, inodes) == FAILURE) return FAILURE;
+    if (read_block(block, inodes) < 0) return FAILURE;
 
     inodes[inode_position % INODES_PER_BLOCK] = *inode;
 
-    if (write_block(block, inodes) == FAILURE) return FAILURE;
+    if (write_block(block, inodes) < 0) return FAILURE;
 
     return SUCCESS;
 }
 
 int read_inode(unsigned int inode_position, struct INode *inode) {
     struct SuperBlock sb;
-
-    if (read_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
+    if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     const unsigned int block = sb.iNodesFirstBlock + inode_position / INODES_PER_BLOCK;
 
     struct INode inodes[INODES_PER_BLOCK];
-
-    if (read_block(block, inodes) == FAILURE) return FAILURE;
+    if (read_block(block, inodes) < 0) return FAILURE;
 
     *inode = inodes[inode_position % INODES_PER_BLOCK];
 
@@ -240,36 +228,34 @@ int read_inode(unsigned int inode_position, struct INode *inode) {
 
 int reserve_inode(unsigned char type, unsigned char permissions) {
     struct SuperBlock sb;
-
-    if (read_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
+    if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     if (sb.totalFreeINodes == 0) return FAILURE;
 
     const unsigned int inode_position = sb.firstFreeINode;
 
     struct INode inode;
-
-    if (read_inode(inode_position, &inode) == FAILURE) return FAILURE;
+    if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
     sb.firstFreeINode = inode.directPointers[0];
 
-    inode.type = type;
-    inode.permissions = permissions;
-    inode.totalLinks = 1;
-    inode.logicalBytesSize = 0;
-    inode.dataAccessedAt = time(NULL);
-    inode.dataModifiedAt = inode.dataAccessedAt;
-    inode.modifiedAt = inode.dataAccessedAt;
-    inode.totalBusyBlocks = 0;
+    inode.metadata.type = type;
+    inode.metadata.permissions = permissions;
+    inode.metadata.linksCount = 1;
+    inode.metadata.size = 0;
+    inode.metadata.dataAccessedAt = time(NULL);
+    inode.metadata.dataModifiedAt = inode.metadata.dataAccessedAt;
+    inode.metadata.modifiedAt = inode.metadata.dataAccessedAt;
+    inode.metadata.busyBlocksCount = 0;
 
     memset(inode.directPointers, 0, DIRECT_POINTERS * sizeof(unsigned int));
     memset(inode.indirectPointers, 0, INDIRECT_POINTERS * sizeof(unsigned int));
 
-    if (write_inode(inode_position, &inode) == FAILURE) return FAILURE;
+    if (write_inode(inode_position, &inode) < 0) return FAILURE;
 
     sb.totalFreeINodes--;
 
-    if (write_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
+    if (write_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     return (int) inode_position;
 }
@@ -289,7 +275,6 @@ int get_block_level(unsigned int logical_block, struct INode *inode, unsigned in
     for (int lvl = 0; lvl < NUM_LEVELS; ++lvl) {
         if (logical_block < ranges[lvl]) {
             *block_ptr = lvl > 0 ? inode->indirectPointers[lvl - 1] : inode->directPointers[logical_block];
-
             return lvl;
         }
     }
@@ -364,11 +349,10 @@ int reserve_inode_block(struct INode *inode, unsigned int logical_block, unsigne
                         unsigned int intermediate_pointer_block_position, unsigned int block_ptr_position) {
 
     const int block_ptr = reserve_block();
+    if (block_ptr < 0) return FAILURE;
 
-    if (block_ptr == FAILURE) return FAILURE;
-
-    inode->totalBusyBlocks++;
-    inode->modifiedAt = time(NULL);
+    inode->metadata.busyBlocksCount++;
+    inode->metadata.modifiedAt = time(NULL);
 
     if (logical_block_level == 0) {
         debug("directPointers[%d] = %d", logical_block, block_ptr);
@@ -385,24 +369,24 @@ int reserve_inode_block(struct INode *inode, unsigned int logical_block, unsigne
     debug("nivel%d[%d] = %d", reserve_block_level + 1, block_ptr_position, block_ptr);
     intermediate_pointer_block[block_ptr_position] = block_ptr;
 
-    if (write_block(intermediate_pointer_block_position, intermediate_pointer_block) == FAILURE) return FAILURE;
+    if (write_block(intermediate_pointer_block_position, intermediate_pointer_block) < 0) return FAILURE;
 
     return block_ptr;
 }
 
-int get_physical_by_logical_block(struct INode *inode, unsigned int logical_block, unsigned char reserve) {
-    unsigned int block_ptr;
+int get_physical_block(struct INode *inode, unsigned int logical_block, unsigned char reserve) {
     unsigned int prev_block_ptr;
+    unsigned int block_ptr;
     int block_ptr_position;
 
     const signed int logical_block_level = get_block_level(logical_block, inode, &block_ptr);
-    if (logical_block_level == FAILURE) return FAILURE;
+    if (logical_block_level < 0) return FAILURE;
 
     unsigned int pointer_block[POINTERS_PER_BLOCK];
 
     for (int current_level = logical_block_level; current_level > 0; --current_level) {
         if (block_ptr) {
-            if (read_block(block_ptr, pointer_block) == FAILURE) return FAILURE;
+            if (read_block(block_ptr, pointer_block) < 0) return FAILURE;
         } else {
             if (!reserve) return FAILURE;
 
@@ -416,7 +400,7 @@ int get_physical_by_logical_block(struct INode *inode, unsigned int logical_bloc
                     block_ptr_position
             );
 
-            if (reserved_block_ptr == FAILURE) return FAILURE;
+            if (reserved_block_ptr < 0) return FAILURE;
 
             memset(pointer_block, EMPTY_BYTE, BLOCK_SIZE);
 
@@ -424,7 +408,7 @@ int get_physical_by_logical_block(struct INode *inode, unsigned int logical_bloc
         }
 
         block_ptr_position = block_pointer_position_by_level(logical_block, current_level);
-        if (block_ptr_position == FAILURE) return FAILURE;
+        if (block_ptr_position < 0) return FAILURE;
 
         prev_block_ptr = block_ptr;
         block_ptr = pointer_block[block_ptr_position];
@@ -456,7 +440,7 @@ int get_physical_by_logical_block(struct INode *inode, unsigned int logical_bloc
 int free_inode_tree(unsigned int *physical_block, unsigned int from_logical_block, int level) {
     if (level == 0) {
         const int freed = free_block(*physical_block) > 0;
-        debug("Se ha liberado el bloque físico %d", *physical_block);
+        debug("Se ha liberado el bloque de datos %d", *physical_block);
         *physical_block = 0;
         return freed;
     }
@@ -468,6 +452,8 @@ int free_inode_tree(unsigned int *physical_block, unsigned int from_logical_bloc
 
     const int position = from_logical_block ? block_pointer_position_by_level(from_logical_block, level) : 0;
 
+    unsigned char modified = 0;
+
     for (int i = position; i < POINTERS_PER_BLOCK; ++i) {
         if (pointer_block[i]) {
             freed_blocks += free_inode_tree(
@@ -475,21 +461,37 @@ int free_inode_tree(unsigned int *physical_block, unsigned int from_logical_bloc
                     i == position ? from_logical_block : 0,
                     level - 1
             );
+
+            if (!modified) modified = !*(pointer_block + i);
         }
     }
 
-    if (memcmp(pointer_block, empty_buffer, BLOCK_SIZE) == 0) {
+    const static unsigned char empty_block[BLOCK_SIZE] = {0};
+
+    if (memcmp(pointer_block, empty_block, BLOCK_SIZE) == 0) {
         freed_blocks += free_block(*physical_block) > 0;
-        debug("Se ha liberado el bloque físico %d", *physical_block);
+        debug("Se ha liberado el bloque de punteros %d", *physical_block);
         *physical_block = 0;
-    } else if (freed_blocks > 0) {
+    } else if (modified) {
         write_block(*physical_block, pointer_block);
-        debug("Se ha actualizado el bloque físico de punteros %d", *physical_block);
+        debug("Se ha escrito el bloque de punteros %d", *physical_block);
     }
 
     return freed_blocks;
 }
 
+/**
+ * Obtener la posición relativa al array de punteros directos del puntero del primer bloque a consultar para el bloque
+ * lógico.
+ *
+ * @param logical_block Bloque lógico del cual se quiere obtener el primer puntero.
+ *
+ * @return Posición relativa al array de punteros directos.
+ *         0-11 = DIRECTOS
+ *           12 = INDIRECTOS 1
+ *           13 = INDIRECTOS 2
+ *           14 = INDIRECTOS 3
+ */
 int get_block_pointer_position(int logical_block) {
     for (int lvl = 0; lvl < NUM_LEVELS; ++lvl) {
         if (logical_block < ranges[lvl]) return lvl > 0 ? DIRECT_POINTERS + lvl - 1 : logical_block;
@@ -513,35 +515,58 @@ int free_inode_blocks(unsigned int first_logical_block, struct INode *inode) {
             );
         }
     }
-
     debug("Se han liberado %d bloques", freed_blocks);
     return (int) freed_blocks;
 }
 
 int free_inode(unsigned int inode_position) {
     struct INode inode;
-
-    if (read_inode(inode_position, &inode) == FAILURE) return FAILURE;
+    if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
     const signed int freed_blocks = free_inode_blocks(0, &inode);
-    if (freed_blocks == FAILURE) return FAILURE;
+    if (freed_blocks < 0) return FAILURE;
 
-    inode.modifiedAt = time(NULL);
-    inode.totalBusyBlocks -= freed_blocks;
-    inode.logicalBytesSize = 0;
-    inode.type = FREE_INODE;
+    inode.metadata.modifiedAt = time(NULL);
+    inode.metadata.busyBlocksCount -= freed_blocks;
+    inode.metadata.size = 0;
+    inode.metadata.type = FREE_INODE;
 
     struct SuperBlock sb;
-
-    if (read_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
+    if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     inode.directPointers[0] = sb.firstFreeINode;
     sb.firstFreeINode = inode_position;
     sb.totalFreeINodes++;
 
-    if (write_block(SUPER_BLOCK_POSITION, &sb) == FAILURE) return FAILURE;
-
-    if (write_inode(inode_position, &inode) == FAILURE) return FAILURE;
+    if (write_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
+    if (write_inode(inode_position, &inode) < 0) return FAILURE;
 
     return (int) inode_position;
+}
+
+int print_inode(struct Metadata *metadata, char *name) {
+    printf("\n *** %s ***\n", name);
+
+    printf(
+            "Tipo: %c\n"
+            "Permisos: %d\n"
+            "-------------------------------------\n"
+            "Fecha del último acceso a los datos: %s"
+            "Fecha de la última modificación de los datos: %s"
+            "Fecha de la última modificación del i-nodo: %s"
+            "-------------------------------------\n"
+            "Número de enlaces: %d\n"
+            "Tamaño en bytes lógicos: %d\n"
+            "Número de bloques ocupados: %d\n",
+            metadata->type,
+            metadata->permissions,
+            ctime(&metadata->dataAccessedAt),
+            ctime(&metadata->dataModifiedAt),
+            ctime(&metadata->modifiedAt),
+            metadata->linksCount,
+            metadata->size,
+            metadata->busyBlocksCount
+    );
+
+    return SUCCESS;
 }

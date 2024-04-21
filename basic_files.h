@@ -30,10 +30,7 @@
 #define WRITE 0b010
 #define EXEC 0b001
 
-#define ALL_PERMS (READ | WRITE | EXEC)
 #define RW (READ | WRITE)
-#define RX (READ | EXEC)
-#define WX (WRITE | EXEC)
 #define RWX (RW | EXEC)
 
 #define DIRECT_POINTERS 12
@@ -58,119 +55,134 @@
                         ); \
         } while (0)
 
-// 1024 Bytes
+/**
+ * Súper bloque del sistema de ficheros. Almacena toda la metainformación relevante de este.
+ */
 struct SuperBlock {
     /**
-     * Posición absoluta del primer bloque del mapa de bits
+     * Posición absoluta del primer bloque del mapa de bits.
      */
     unsigned int bitMapFirstBlock;
     /**
-     * Posición absoluta del último bloque del mapa de bits
+     * Posición absoluta del último bloque del mapa de bits.
      */
     unsigned int bitMapLastBlock;
 
     /**
-     * Posición absoluta del primer bloque del array de i-nodos
+     * Posición absoluta del primer bloque del array de i-nodos.
      */
     unsigned int iNodesFirstBlock;
     /**
-     * Posición absoluta del último bloque del array de i-nodos
+     * Posición absoluta del último bloque del array de i-nodos.
      */
     unsigned int iNodesLastBlock;
 
     /**
-     * Posición absoluta del primer bloque de datos
+     * Posición absoluta del primer bloque de datos.
      */
     unsigned int dataFirstBlock;
     /**
-     * Posición absoluta del último bloque de datos
+     * Posición absoluta del último bloque de datos.
      */
     unsigned int dataLastBlock;
 
     /**
-     * Posición del i-nodo del directorio raíz (relativa al array de i-nodos)
+     * Posición del i-nodo del directorio raíz (relativa al array de i-nodos).
      */
     unsigned int rootINode;
     /**
-     * Posición del primer i-nodo libre (relativa al array de i-nodos)
+     * Posición del primer i-nodo libre (relativa al array de i-nodos).
      */
     unsigned int firstFreeINode;
 
     /**
-     * Cantidad de bloques libres (en el disco completo)
+     * Cantidad de bloques libres (en el disco completo).
      */
     unsigned int totalFreeBlocks;
     /**
-     * Cantidad de i-nodos libres (en el array de i-nodos)
+     * Cantidad de i-nodos libres (en el array de i-nodos).
      */
     unsigned int totalFreeINodes;
 
     /**
-     * Cantidad total de bloques del disco
+     * Cantidad total de bloques del disco.
      */
     unsigned int totalBlocks;
     /**
-     * Cantidad total de i-nodos (heurística)
+     * Cantidad total de i-nodos (heurística).
      */
     unsigned int totalINodes;
 
     /**
-     * Reservado
+     * Reservado.
      */
-    char _padding[SUPER_BLOCK_SIZE - 12 * sizeof(unsigned int)];
+    char _padding[
+            SUPER_BLOCK_SIZE
+            - 12 * sizeof(unsigned int)
+    ];
 };
 
-// 128 Bytes
-struct INode {
+struct Metadata {
     /**
      * Directorio, fichero o libre.
      */
     unsigned char type;
     /**
-     * Escritura (0b100), lectura (0b010) y ejecución (0b001)
+     * Escritura (0b100), lectura (0b010) y ejecución (0b001).
      */
     unsigned char permissions;
 
     unsigned char _memoryAlignment[6];
 
     /**
-     * Fecha y hora del último acceso a datos
+     * Fecha y hora del último acceso a datos.
      */
     time_t dataAccessedAt;
     /**
-     * Fecha y hora de la última modificación de datos
+     * Fecha y hora de la última modificación de datos.
      */
     time_t dataModifiedAt;
     /**
-     * Fecha y hora de la última modificación del i-nodo
+     * Fecha y hora de la última modificación del i-nodo.
      */
     time_t modifiedAt;
 
     /**
-     * Cantidad de enlaces de entradas en directorio
+     * Cantidad de enlaces de entradas en directorio.
      */
-    unsigned int totalLinks;
+    unsigned int linksCount;
     /**
-     * Tamaño en bytes lógicos (EOF)
+     * Tamaño en bytes lógicos (EOF).
      */
-    unsigned int logicalBytesSize;
+    unsigned int size;
     /**
-     * Cantidad de bloques ocupados por la zona de datos
+     * Cantidad de bloques ocupados por la zona de datos.
      */
-    unsigned int totalBusyBlocks;
+    unsigned int busyBlocksCount;
+};
 
+struct INode {
+    /**
+     * Metadatos del i-nodo.
+     */
+    struct Metadata metadata;
+
+    /**
+     * Apuntan directamente a bloques de datos.
+     */
     unsigned int directPointers[DIRECT_POINTERS];
+    /**
+     * Apuntan a bloques de punteros. De nivel 1, nivel 2 y nivel 3 respectivamente.
+     */
     unsigned int indirectPointers[INDIRECT_POINTERS];
 
     /**
-     * Reservado
+     * Reservado.
      */
     char _padding[
             INODE_SIZE
-            - 2 * sizeof(unsigned char)
-            - 3 * sizeof(time_t)
-            - 18 * sizeof(unsigned int)
-            - 6 * sizeof(unsigned char)
+            - sizeof(struct Metadata)
+            - POINTERS * sizeof(unsigned int)
     ];
 };
 
@@ -310,6 +322,16 @@ int free_inode_blocks(unsigned int first_logical_block, struct INode *inode);
  * @param logical_block Número de bloque lógico.
  * @param reserve 1 si se reserva. 0 si no se reserva.
  *
- * @return Puntero al bloque físico correspondiente al bloque lógico especificado.
+ * @return Puntero al bloque físico correspondiente al bloque lógico especificado. Puede devolver error.
  */
-int get_physical_by_logical_block(struct INode *inode, unsigned int logical_block, unsigned char reserve);
+int get_physical_block(struct INode *inode, unsigned int logical_block, unsigned char reserve);
+
+/**
+ * Mostrar los metadatos de un i-nodo por pantalla.
+ *
+ * @param metadata Metadatos del i-nodo a mostrar.
+ * @param name Título/Nombre del i-nodo.
+ *
+ * @return 0.
+ */
+int print_inode(struct Metadata *metadata, char *name);

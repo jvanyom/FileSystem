@@ -1,45 +1,45 @@
 #include "../files.h"
 
-#define OFFSETS 5
-
-const static int offsets[OFFSETS] = {9000, 209000, 30725000, 409605000, 480000000};
+const static int offsets[] = {9000, 209000, 30725000, 409605000, 480000000};
 
 int main(int argc, char **argv) {
-    if (argc != 4) return failure("Sintaxi: escribir <dispositivo> <datos> <i-nodos diferentes>");
-
-    if (mount(argv[1]) == FAILURE) {
-        return failure("No ha sido posible montar correctamente el dispositivo");
-    }
-
-    struct Metadata metadata;
+    if (argc != 4) return failure(SYNTAX, argv[0], "<dispositivo> <datos> <número de i-nodos diferentes>");
+    if (mount(argv[1]) < 0) return failure(MOUNT, argv[1]);
 
     const unsigned int inodes_num = strtol(argv[3], NULL, 10);
+    if (errno == EINVAL) return failure(NAN, "número de i-nodos diferentes");
 
     const unsigned int buffer_length = strlen(argv[2]);
 
     printf("Longitud del texto: %d\n", buffer_length);
 
-    unsigned int inode_position = inodes_num == 0 ? reserve_inode(FILE_INODE, RW) : 0;
+    int inode_position = inodes_num == 0 ? reserve_inode(FILE_INODE, RW) : 0;
+    if (inode_position < 0) return f("No ha sido posible reservar un nuevo i-nodo");
 
-    for (int i = 0; i < OFFSETS; ++i) {
-        if (inodes_num == 1) inode_position = reserve_inode(FILE_INODE, RW);
+    struct Metadata metadata;
 
-        const signed int wrote_bytes = my_write(inode_position, argv[2], offsets[i], buffer_length);
-
-        if (my_stat(inode_position, &metadata) == FAILURE) {
-            return failure("No ha sido posible leer correctamente los metadatos del i-nodo");
+    for (int i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
+        if (inodes_num == 1) {
+            inode_position = reserve_inode(FILE_INODE, RW);
+            if (inode_position < 0) return f("No ha sido posible reservar un nuevo i-nodo");
         }
 
-        printf("--------------------------------------------------------\n");
+        const int wrote_bytes = my_write(inode_position, argv[2], offsets[i], buffer_length);
+        if (wrote_bytes < 0) {
+            return f("No ha sido posible escribir el contenido en el i-nodo %d", inode_position);
+        }
+
+        if (my_stat(inode_position, &metadata) < 0) {
+            return f("No ha sido posible leer correctamente los metadatos del i-nodo %d", inode_position);
+        }
+
         printf("I-nodo reservado: %d\n", inode_position);
         printf("Offset: %d\n", offsets[i]);
         printf("Bytes escritos: %d\n", wrote_bytes);
-        printf("Tamaño en bytes lógicos: %d\n", metadata.logicalBytesSize);
-        printf("Bloques ocupados: %d\n", metadata.totalBusyBlocks);
+        printf("Tamaño en bytes lógicos: %d\n", metadata.size);
+        printf("Bloques ocupados: %d\n", metadata.busyBlocksCount);
         printf("--------------------------------------------------------\n");
     }
 
-    if (umount() == FAILURE) return failure("No ha sido posible desmontar correctamente el dispositivo");
-
-    return EXIT_SUCCESS;
+    return umount() < 0 ? failure(MOUNT, argv[1]) : EXIT_SUCCESS;
 }
