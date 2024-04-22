@@ -32,7 +32,7 @@ int find_entry(const char *partial_path, unsigned int parent_inode_position, cha
 
     if (split_path(partial_path, initial_path, final_path, &type) < 0) return BAD_PATH;
 
-    debug("Inicial: %s | Final: %s", initial_path, final_path);
+    debug("Inicial: %s | Final: %s | Reservar: %d", initial_path, final_path, reserve);
 
     struct INode parent_inode;
     if (read_inode(parent_inode_position, &parent_inode) < 0) return FAILURE;
@@ -65,6 +65,10 @@ int find_entry(const char *partial_path, unsigned int parent_inode_position, cha
 
     const int new_inode_position = reserve_inode(*final_path == SLASH ? DIR_INODE : FILE_INODE, RW);
     if (new_inode_position < 0) return FAILURE;
+    debug(
+            "Se ha reservado el i-nodo %d tipo '%c' con permisos %d para %s",
+            new_inode_position, *final_path == SLASH ? DIR_INODE : FILE_INODE, RW, initial_path
+    );
 
     struct Entry new_entry = {.filename = {0}};
     strcpy(new_entry.filename, initial_path);
@@ -79,6 +83,6 @@ int find_entry(const char *partial_path, unsigned int parent_inode_position, cha
 
     if (wrote_bytes < 0 && free_inode(new_entry.inodePosition) < 0) return FAILURE;
 
-    debug("Se ha creado la entrada '%s' en la posición %d", new_entry.filename, entry_position);
+    debug("Se ha creado la entrada: '%s' | %d", new_entry.filename, new_entry.inodePosition);
     return SUCCESS;
 }

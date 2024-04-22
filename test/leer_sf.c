@@ -6,7 +6,7 @@
 #define DEBUG_BLOCKS 0
 #define DEBUG_ROOT_INODE 0
 #define DEBUG_BLOCK_TRANSLATION 0
-#define DEBUG_FIND_DIR 1
+#define DEBUG_FIND_DIR 0
 
 int print_super_block(struct SuperBlock *sb) {
     if (read_block(SUPER_BLOCK_POSITION, sb) < 0) {
