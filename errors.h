@@ -12,6 +12,9 @@
 #define MOUNT (-4)
 #define NAN (-5)
 #define SYNTAX (-6)
+#define BAD_PATH (-7)
+#define IS_FILE (-8)
+#define FILE_ALREADY_EXISTS (-9)
 
 #define RESET       "\x1b[0m"
 #define RED         "\x1b[31m"

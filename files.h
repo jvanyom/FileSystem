@@ -5,24 +5,24 @@
  *
  * @param inode_position Posición del i-nodo que se quiere escribir.
  * @param buffer Contenido que se quiere escribir.
- * @param file_offset Posición inicial de escritura en bytes.
+ * @param offset Posición inicial de escritura en bytes.
  * @param count Número de bytes a escribir.
  *
  * @return Bytes escritos. Puede devolver error.
  */
-int my_write(unsigned int inode_position, const void *buffer, unsigned int file_offset, unsigned int count);
+int my_write(unsigned int inode_position, const void *buffer, unsigned int offset, unsigned int count);
 
 /**
  * Leer contenido de un fichero/directorio dentro de 'buffer'.
  *
  * @param inode_position Posición del i-nodo que se quiere leer.
  * @param buffer Contenedor donde se almacena la información leída.
- * @param file_offset Posición inicial de escritura en bytes.
+ * @param offset Posición inicial de escritura en bytes.
  * @param count Cantidad a leer en bytes.
  *
  * @return Bytes leídos. Puede devolver error.
  */
-int my_read(unsigned int inode_position, void *buffer, unsigned int file_offset, unsigned int count);
+int my_read(unsigned int inode_position, void *buffer, unsigned int offset, unsigned int count);
 
 /**
  * Leer metadatos de un i-nodo.

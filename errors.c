@@ -6,7 +6,10 @@ const static char *errors[] = {
         "No tienes permisos de escritura",
         "No ha sido posible montar correctamente el dispositivo '%s'",
         "El valor de '%s' debe ser un número",
-        "Sintaxi: %s %s"
+        "Sintaxi: %s %s",
+        "La ruta especificada no es correcta",
+        "El archivo especificado es un fichero",
+        "El archivo especificado ya existe"
 };
 
 int print(const char *message) {

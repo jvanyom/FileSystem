@@ -115,9 +115,11 @@ int set_block_state(unsigned int physical_block, unsigned int state) {
 
     const unsigned char mask = BIT7 >> (physical_block % BYTE_LENGTH);
 
-    unsigned char *byte_to_modify = &bitmap[block_byte];
-
-    *byte_to_modify = state ? *byte_to_modify | mask : *byte_to_modify & ~mask;
+    if (state) {
+        bitmap[block_byte] |= mask;
+    } else {
+        bitmap[block_byte] &= ~mask;
+    }
 
     if (write_block(absolute_block, &bitmap) < 0) return FAILURE;
 

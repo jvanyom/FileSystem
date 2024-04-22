@@ -1,6 +1,6 @@
 #include "files.h"
 
-int my_write(unsigned int inode_position, const void *buffer, unsigned int file_offset, unsigned int count) {
+int my_write(unsigned int inode_position, const void *buffer, unsigned int offset, unsigned int count) {
     struct INode inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
@@ -8,12 +8,12 @@ int my_write(unsigned int inode_position, const void *buffer, unsigned int file_
 
     unsigned int wrote_bytes = 0;
 
-    const unsigned int first_logical_block = file_offset / BLOCK_SIZE;
-    const unsigned int first_logical_block_offset = file_offset % BLOCK_SIZE;
+    const unsigned int first_logical_block = offset / BLOCK_SIZE;
+    const unsigned int first_logical_block_offset = offset % BLOCK_SIZE;
     const unsigned int first_block_remainder_size = BLOCK_SIZE - first_logical_block_offset;
 
-    const unsigned int last_logical_block = (file_offset + count - 1) / BLOCK_SIZE;
-    const unsigned int last_logical_block_size = (file_offset + count - 1) % BLOCK_SIZE;
+    const unsigned int last_logical_block = (offset + count - 1) / BLOCK_SIZE;
+    const unsigned int last_logical_block_size = (offset + count - 1) % BLOCK_SIZE;
 
     const unsigned int data_block_size = last_logical_block - first_logical_block;
 
@@ -67,7 +67,7 @@ int my_write(unsigned int inode_position, const void *buffer, unsigned int file_
         wrote_bytes += bytes_to_write;
     }
 
-    const unsigned int total_bytes = wrote_bytes + file_offset;
+    const unsigned int total_bytes = wrote_bytes + offset;
 
     inode.metadata.dataModifiedAt = time(NULL);
 
@@ -81,23 +81,23 @@ int my_write(unsigned int inode_position, const void *buffer, unsigned int file_
     return (int) wrote_bytes;
 }
 
-int my_read(unsigned int inode_position, void *buffer, unsigned int file_offset, unsigned int count) {
+int my_read(unsigned int inode_position, void *buffer, unsigned int offset, unsigned int count) {
     struct INode inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
     if ((inode.metadata.permissions & READ) == 0) return NO_READ_PERMISSIONS;
 
-    if (file_offset > inode.metadata.size) return 0;
-    if (file_offset + count > inode.metadata.size) count = inode.metadata.size - file_offset;
+    if (offset > inode.metadata.size) return 0;
+    if (offset + count > inode.metadata.size) count = inode.metadata.size - offset;
 
     unsigned int read_bytes = 0;
 
-    const unsigned int first_logical_block = file_offset / BLOCK_SIZE;
-    const unsigned int first_logical_block_offset = file_offset % BLOCK_SIZE;
+    const unsigned int first_logical_block = offset / BLOCK_SIZE;
+    const unsigned int first_logical_block_offset = offset % BLOCK_SIZE;
     const unsigned int first_block_remainder_size = BLOCK_SIZE - first_logical_block_offset;
 
-    const unsigned int last_logical_block = (file_offset + count - 1) / BLOCK_SIZE;
-    const unsigned int last_logical_block_size = (file_offset + count - 1) % BLOCK_SIZE;
+    const unsigned int last_logical_block = (offset + count - 1) / BLOCK_SIZE;
+    const unsigned int last_logical_block_size = (offset + count - 1) % BLOCK_SIZE;
 
     const unsigned int data_block_size = last_logical_block - first_logical_block;
 

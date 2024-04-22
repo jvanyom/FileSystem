@@ -1,11 +1,18 @@
 #include "files.h"
 
-#define ENTRIES_PER_BLOCK (BLOCK_SIZE / sizeof(struct Entry))
+#define ENTRY_SIZE sizeof(struct Entry)
+#define ENTRIES_PER_BLOCK (BLOCK_SIZE / ENTRY_SIZE)
 #define FILENAME_SIZE 60
+
+#define EMPTY_STR ""
+#define SLASH_STR "/"
+
+#define SLASH '/'
+#define EOL '\0'
 
 struct Entry {
     char filename[FILENAME_SIZE];
-    unsigned int inode_position;
+    unsigned int inodePosition;
 };
 
 /**
@@ -34,5 +41,4 @@ int split_path(const char *path, char *initial, char *final, char *type);
  *
  * @return 0. Puede devolver error.
  */
-int find_entry(const char *partial_path, unsigned int *parent_inode_position, unsigned int *entry_inode_position,
-               unsigned int *entry_position, char reserve, unsigned char permissions);
+int find_entry(const char *partial_path, unsigned int parent_inode_position, char reserve, unsigned char permissions);
