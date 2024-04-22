@@ -41,7 +41,12 @@ int find_entry(const char *partial_path, unsigned int parent_inode_position, cha
     unsigned int entry_position = 0;
 
     for (unsigned int block = 0; block < parent_inode.metadata.busyBlocksCount; ++block) {
-        const signed read_bytes = my_read(parent_inode_position, entries, block * BLOCK_SIZE, BLOCK_SIZE);
+        const signed read_bytes = my_read(
+                parent_inode_position,
+                entries,
+                block * BLOCK_SIZE,
+                BLOCK_SIZE
+        );
         if (read_bytes < 0) return FAILURE;
         entry_position = 0;
 
