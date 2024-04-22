@@ -32,10 +32,8 @@ int split_path(const char *path, char *initial, char *final, char *type);
 /**
  * Buscar una determinada entrada entre todas las entradas del i-nodo correspondiente a su directorio padre.
  *
- * @param partial_path Ruta parcial al fichero. Siempre empieza con la ruta absoluta.
+ * @param partial_path Ruta parcial al fichero. Es una ruta absoluta.
  * @param parent_inode_position Posición del i-nodo del directorio padre.
- * @param entry_inode_position Puntero donde se almacena la posición del i-nodo de la entrada.
- * @param entry_position Puntero donde se almacena la posición de la entrada.
  * @param reserve 0 permite consultar y 1 permite consultar y crear nueva nueva entrada.
  * @param permissions Permisos.
  *
