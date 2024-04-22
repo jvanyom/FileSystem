@@ -1,4 +1,4 @@
-#include "../basic_files.h"
+#include "../directories.h"
 
 #define DEBUG_SUPER_BLOCK 1
 #define DEBUG_INODES 0
@@ -6,6 +6,7 @@
 #define DEBUG_BLOCKS 0
 #define DEBUG_ROOT_INODE 0
 #define DEBUG_BLOCK_TRANSLATION 0
+#define DEBUG_FIND_DIR 1
 
 int print_super_block(struct SuperBlock *sb) {
     if (read_block(SUPER_BLOCK_POSITION, sb) < 0) {
@@ -155,6 +156,33 @@ int print_logical_blocks_translation() {
     return print_inode(&inode.metadata, "I-NODO RESERVADO");
 }
 
+int print_find_entry(char *path, char reserve) {
+    printf("\nRuta: %s | Reservar: %d\n", path, reserve);
+    printf("\n********************************************************************\n");
+
+    const signed error = find_entry(path, 0, reserve, RW);
+    if (error < 0) return failure(error);
+
+    return SUCCESS;
+}
+
+int print_find_entries() {
+    print_find_entry("pruebas/", RESERVE);                    // BAD_PATH
+    print_find_entry("/pruebas/", NO_RESERVE);                // BAD_PATH
+    print_find_entry("/pruebas/docs/", RESERVE);              // BAD_PATH
+    print_find_entry("/pruebas/", RESERVE);                   // Se crea /pruebas/
+    print_find_entry("/pruebas/docs/", RESERVE);              // Se crea /pruebas/docs/
+    print_find_entry("/pruebas/docs/doc1", RESERVE);          // Se crea /pruebas/docs/doc1
+    print_find_entry("/pruebas/docs/doc1/doc11", RESERVE);    // IS_FILE
+    print_find_entry("/pruebas/", RESERVE);                   // FILE_ALREADY_EXISTS
+    print_find_entry("/pruebas/docs/doc1", NO_RESERVE);       // Se consulta /pruebas/docs/doc1
+    print_find_entry("/pruebas/docs/doc1", RESERVE);          // FILE_ALREADY_EXISTS
+    print_find_entry("/pruebas/casos/", RESERVE);             // Se crea /pruebas/casos/
+    print_find_entry("/pruebas/docs/doc2", RESERVE);          // Se crea /pruebas/docs/doc2
+
+    return SUCCESS;
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) return failure(SYNTAX, argv[0], "<dispositivo>");
     if (mount(argv[1]) < 0) return failure(MOUNT, argv[1]);
@@ -178,6 +206,9 @@ int main(int argc, char **argv) {
 #endif
 #if DEBUG_BLOCK_TRANSLATION
     if (print_logical_blocks_translation() < 0) return EXIT_FAILURE;
+#endif
+#if DEBUG_FIND_DIR
+    print_find_entries();
 #endif
 
     return umount() < 0 ? failure(MOUNT, argv[1]) : EXIT_SUCCESS;
