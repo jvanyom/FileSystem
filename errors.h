@@ -9,12 +9,15 @@
 
 #define NO_READ_PERMISSIONS (-2)
 #define NO_WRITE_PERMISSIONS (-3)
-#define MOUNT (-4)
-#define NAN (-5)
-#define SYNTAX (-6)
-#define BAD_PATH (-7)
-#define IS_FILE (-8)
-#define FILE_ALREADY_EXISTS (-9)
+#define NOT_VALID_PERMISSIONS (-4)
+#define MOUNT (-5)
+#define DEV_NOT_EXISTS (-6)
+#define NAN (-7)
+#define SYNTAX (-8)
+#define FILE_NOT_EXISTS (-9)
+#define FILE_ALREADY_EXISTS (-10)
+#define IS_FILE (-11)
+#define NOT_CREATED (-12)
 
 #define RESET       "\x1b[0m"
 #define RED         "\x1b[31m"
@@ -29,7 +32,7 @@
  *
  * @return 1
  */
-int f(const char *message, ...);
+int print_cerror(const char *message, ...);
 
 /**
  * Mostrar error según su código.
@@ -38,4 +41,11 @@ int f(const char *message, ...);
  *
  * @return 1.
  */
-int failure(signed int code, ...);
+int print_error(signed int code, ...);
+
+/**
+ * Equivalente a 'print_error(FAILURE)'.
+ *
+ * @return EXIT_FAILURE.
+ */
+int print_unexpected();

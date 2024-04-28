@@ -10,7 +10,7 @@
 
 int print_super_block(struct SuperBlock *sb) {
     if (read_block(SUPER_BLOCK_POSITION, sb) < 0) {
-        return f("No ha sido posible leer correctamente el súper bloque");
+        return print_cerror("No ha sido posible leer correctamente el súper bloque");
     }
 
     printf("\n*** SUPER BLOQUE ***\n");
@@ -35,12 +35,12 @@ int print_super_block(struct SuperBlock *sb) {
             "Cantidad de bloques: %d\n"
             "Cantidad de i-nodos: %d\n"
             "-------------------------------------\n",
-            sb->bitMapFirstBlock, sb->bitMapLastBlock,
+            sb->bitmapFirstBlock, sb->bitmapLastBlock,
             sb->iNodesFirstBlock, sb->iNodesLastBlock,
             sb->dataFirstBlock, sb->dataLastBlock,
-            sb->rootINode, sb->firstFreeINode,
-            sb->totalFreeBlocks, sb->totalFreeINodes,
-            sb->totalBlocks, sb->totalINodes
+            sb->rootINode, sb->nextFreeINodePosition,
+            sb->freeBlocksCount, sb->freeINodesCount,
+            sb->blocksCount, sb->iNodesCount
     );
 
     printf("Tamaño súper bloque: %lu\n", sizeof(struct SuperBlock));
@@ -56,7 +56,7 @@ int print_inodes(struct SuperBlock *sb) {
 
     for (unsigned int i = sb->iNodesFirstBlock; i <= sb->iNodesLastBlock; ++i) {
         if (read_block(i, &inodes) < 0) {
-            return f("No ha sido posible leer correctamente el bloque físico %d", i);
+            return print_cerror("No ha sido posible leer correctamente el bloque físico %d", i);
         }
 
         for (unsigned int j = 0; j < INODES_PER_BLOCK; ++j) {
@@ -71,7 +71,7 @@ int print_inodes(struct SuperBlock *sb) {
 
 int print_block_state(unsigned int block) {
     const unsigned char state = get_block_state(block);
-    if (state < 0) return f("No ha sido posible leer correctamente el estado del bloque %d", block);
+    if (state < 0) return print_cerror("No ha sido posible leer correctamente el estado del bloque %d", block);
 
     printf("Bloque: %d | Estado: %d\n", block, state);
 
@@ -83,8 +83,8 @@ int print_bitmap(struct SuperBlock *sb) {
 
     return (
             print_block_state(SUPER_BLOCK_POSITION) < 0 ||
-            print_block_state(sb->bitMapFirstBlock) < 0 ||
-            print_block_state(sb->bitMapLastBlock) < 0 ||
+            print_block_state(sb->bitmapFirstBlock) < 0 ||
+            print_block_state(sb->bitmapLastBlock) < 0 ||
             print_block_state(sb->iNodesFirstBlock) < 0 ||
             print_block_state(sb->iNodesLastBlock) < 0 ||
             print_block_state(sb->dataFirstBlock) < 0 ||
@@ -96,27 +96,27 @@ int print_blocks(struct SuperBlock *sb) {
     printf("\n*** RESERVA Y LIBERACIÓN DE BLOQUES ***\n");
 
     const int block = reserve_block();
-    if (block < 0) return f("No ha sido posible reservar correctamente un bloque nuevo");
+    if (block < 0) return print_cerror("No ha sido posible reservar correctamente un bloque nuevo");
 
     printf("Se ha reservado el bloque físico %d.\n", block);
 
     if (read_block(SUPER_BLOCK_POSITION, sb) < 0) {
-        return f("No ha sido posible leer correctamente el súper bloque");
+        return print_cerror("No ha sido posible leer correctamente el súper bloque");
     }
 
-    printf("Bloques libres: %d\n", sb->totalFreeBlocks);
+    printf("Bloques libres: %d\n", sb->freeBlocksCount);
 
     if (free_block(block) < 0) {
-        return f("No ha sido posible liberar correctamente el bloque %d", block);
+        return print_cerror("No ha sido posible liberar correctamente el bloque %d", block);
     }
 
     printf("Se ha liberado el bloque físico %d.\n", block);
 
     if (read_block(SUPER_BLOCK_POSITION, sb) < 0) {
-        return f("No ha sido posible leer correctamente el súper bloque");
+        return print_cerror("No ha sido posible leer correctamente el súper bloque");
     }
 
-    printf("Bloques libres: %d\n", sb->totalFreeBlocks);
+    printf("Bloques libres: %d\n", sb->freeBlocksCount);
 
     return SUCCESS;
 }
@@ -125,7 +125,7 @@ int print_root_inode(struct SuperBlock *sb) {
     struct INode root;
 
     if (read_inode(sb->rootINode, &root) < 0) {
-        return f("No ha sido posible leer correctamente el i-nodo raíz (%d)", sb->rootINode);
+        return print_cerror("No ha sido posible leer correctamente el i-nodo raíz (%d)", sb->rootINode);
     }
 
     return print_inode(&root.metadata, "RAÍZ");
@@ -136,17 +136,17 @@ int print_logical_blocks_translation() {
 
     const static unsigned int logical_blocks[] = {8, 204, 30004, 400004, 468750};
 
-    const int inode_position = reserve_inode(FILE_INODE, READ | WRITE);
-    if (inode_position < 0) return f("No ha sido posible reservar un nuevo i-nodo");
+    const int inode_position = reserve_inode(INODE_FILE, READ | WRITE);
+    if (inode_position < 0) return print_cerror("No ha sido posible reservar un nuevo i-nodo");
 
     struct INode inode;
     if (read_inode(inode_position, &inode) < 0) {
-        return f("No ha sido posible leer correctamente el i-nodo %d", inode_position);
+        return print_cerror("No ha sido posible leer correctamente el i-nodo %d", inode_position);
     }
 
     for (int i = 0; i < sizeof(logical_blocks) / sizeof(unsigned int); ++i) {
         if (get_physical_block(&inode, logical_blocks[i], RESERVE) < 0) {
-            return f(
+            return print_cerror(
                     "No ha sido posible obtener correctamente el número bloque físico del bloque lógico %d",
                     logical_blocks[i]
             );
@@ -156,36 +156,36 @@ int print_logical_blocks_translation() {
     return print_inode(&inode.metadata, "I-NODO RESERVADO");
 }
 
-int print_find_entry(char *path, char reserve) {
-    printf("\nRuta: %s | Reservar: %d\n", path, reserve);
+int print_find_entry(char *path, unsigned char create, unsigned char type) {
+    printf("\nRuta: %s | Crear: %d\n", path, create);
     printf("\n********************************************************************\n");
 
-    const signed error = find_entry(path, 0, reserve, RW);
-    if (error < 0) return failure(error);
+    const int error = create ? create_entry(path, RW, type) : get_inode(path, NULL, NULL);
+    if (error < 0) return print_error(error);
 
     return SUCCESS;
 }
 
 int print_find_entries() {
-    print_find_entry("pruebas/", RESERVE);                    // BAD_PATH
-    print_find_entry("/pruebas/", NO_RESERVE);                // BAD_PATH
-    print_find_entry("/pruebas/docs/", RESERVE);              // BAD_PATH
-    print_find_entry("/pruebas/", RESERVE);                   // Se crea /pruebas/
-    print_find_entry("/pruebas/docs/", RESERVE);              // Se crea /pruebas/docs/
-    print_find_entry("/pruebas/docs/doc1", RESERVE);          // Se crea /pruebas/docs/doc1
-    print_find_entry("/pruebas/docs/doc1/doc11", RESERVE);    // IS_FILE
-    print_find_entry("/pruebas/", RESERVE);                   // FILE_ALREADY_EXISTS
-    print_find_entry("/pruebas/docs/doc1", NO_RESERVE);       // Se consulta /pruebas/docs/doc1
-    print_find_entry("/pruebas/docs/doc1", RESERVE);          // FILE_ALREADY_EXISTS
-    print_find_entry("/pruebas/casos/", RESERVE);             // Se crea /pruebas/casos/
-    print_find_entry("/pruebas/docs/doc2", RESERVE);          // Se crea /pruebas/docs/doc2
+    print_find_entry("pruebas/", CREATE, INODE_DIR);                    // BAD_PATH
+    print_find_entry("/pruebas/", NO_CREATE, INODE_DIR);                // BAD_PATH
+    print_find_entry("/pruebas/docs/", CREATE, INODE_DIR);              // BAD_PATH
+    print_find_entry("/pruebas/", CREATE, INODE_DIR);                   // Se crea /pruebas/
+    print_find_entry("/pruebas/docs/", CREATE, INODE_DIR);              // Se crea /pruebas/docs/
+    print_find_entry("/pruebas/docs/doc1", CREATE, INODE_FILE);         // Se crea /pruebas/docs/doc1
+    print_find_entry("/pruebas/docs/doc1/doc11", CREATE, INODE_FILE);   // IS_FILE
+    print_find_entry("/pruebas/", CREATE, INODE_DIR);                   // FILE_ALREADY_EXISTS
+    print_find_entry("/pruebas/docs/doc1", NO_CREATE, INODE_FILE);      // Se consulta /pruebas/docs/doc1
+    print_find_entry("/pruebas/docs/doc1", CREATE, INODE_FILE);         // FILE_ALREADY_EXISTS
+    print_find_entry("/pruebas/casos/", CREATE, INODE_DIR);             // Se crea /pruebas/casos/
+    print_find_entry("/pruebas/docs/doc2", CREATE, INODE_FILE);         // Se crea /pruebas/docs/doc2
 
     return SUCCESS;
 }
 
 int main(int argc, char **argv) {
-    if (argc != 2) return failure(SYNTAX, argv[0], "<dispositivo>");
-    if (mount(argv[1]) < 0) return failure(MOUNT, argv[1]);
+    if (argc != 2) return print_error(SYNTAX, argv[0], "<dispositivo>");
+    if (mount(argv[1]) < 0) return print_error(MOUNT, argv[1]);
 
     struct SuperBlock sb;
 
@@ -211,5 +211,5 @@ int main(int argc, char **argv) {
     print_find_entries();
 #endif
 
-    return umount() < 0 ? failure(MOUNT, argv[1]) : EXIT_SUCCESS;
+    return umount() < 0 ? print_error(MOUNT, argv[1]) : EXIT_SUCCESS;
 }

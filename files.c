@@ -1,6 +1,6 @@
 #include "files.h"
 
-int my_write(unsigned int inode_position, const void *buffer, unsigned int offset, unsigned int count) {
+int my_write_file(unsigned int inode_position, const void *buffer, unsigned int offset, unsigned int count) {
     struct INode inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
@@ -81,7 +81,7 @@ int my_write(unsigned int inode_position, const void *buffer, unsigned int offse
     return (int) wrote_bytes;
 }
 
-int my_read(unsigned int inode_position, void *buffer, unsigned int offset, unsigned int count) {
+int my_read_file(unsigned int inode_position, void *buffer, unsigned int offset, unsigned int count) {
     struct INode inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
@@ -151,12 +151,10 @@ int my_read(unsigned int inode_position, void *buffer, unsigned int offset, unsi
 
     inode.metadata.dataAccessedAt = time(NULL);
 
-    if (write_inode(inode_position, &inode) < 0) return FAILURE;
-
-    return (int) read_bytes;
+    return write_inode(inode_position, &inode) < 0 ? FAILURE : (int) read_bytes;
 }
 
-int my_stat(unsigned int inode_position, struct Metadata *metadata) {
+int my_stat_file(unsigned int inode_position, struct Metadata *metadata) {
     struct INode inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
@@ -165,7 +163,7 @@ int my_stat(unsigned int inode_position, struct Metadata *metadata) {
     return SUCCESS;
 }
 
-int my_chmod(unsigned int inode_position, unsigned char permissions) {
+int my_chmod_file(unsigned int inode_position, unsigned char permissions) {
     struct INode inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
@@ -177,7 +175,7 @@ int my_chmod(unsigned int inode_position, unsigned char permissions) {
     return SUCCESS;
 }
 
-int my_trunc(unsigned int inode_position, unsigned int count) {
+int my_trunc_file(unsigned int inode_position, unsigned int count) {
     struct INode inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 

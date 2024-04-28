@@ -5,3 +5,4 @@
 !test
 test/*.txt
 !test/text.txt
+build.sh

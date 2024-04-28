@@ -19,12 +19,15 @@
 #define NO_RESERVE 0
 #define RESERVE 1
 
+#define NO_CREATE 0
+#define CREATE 1
+
 #define FREE_BLOCK 0
 #define BUSY_BLOCK 1
 
-#define FREE_INODE 'l'
-#define DIR_INODE 'd'
-#define FILE_INODE 'f'
+#define INODE_FREE 'l'
+#define INODE_DIR 'd'
+#define INODE_FILE 'f'
 
 #define READ 0b100
 #define WRITE 0b010
@@ -62,11 +65,11 @@ struct SuperBlock {
     /**
      * Posición absoluta del primer bloque del mapa de bits.
      */
-    unsigned int bitMapFirstBlock;
+    unsigned int bitmapFirstBlock;
     /**
      * Posición absoluta del último bloque del mapa de bits.
      */
-    unsigned int bitMapLastBlock;
+    unsigned int bitmapLastBlock;
 
     /**
      * Posición absoluta del primer bloque del array de i-nodos.
@@ -93,33 +96,30 @@ struct SuperBlock {
     /**
      * Posición del primer i-nodo libre (relativa al array de i-nodos).
      */
-    unsigned int firstFreeINode;
+    unsigned int nextFreeINodePosition;
 
     /**
      * Cantidad de bloques libres (en el disco completo).
      */
-    unsigned int totalFreeBlocks;
+    unsigned int freeBlocksCount;
     /**
      * Cantidad de i-nodos libres (en el array de i-nodos).
      */
-    unsigned int totalFreeINodes;
+    unsigned int freeINodesCount;
 
     /**
      * Cantidad total de bloques del disco.
      */
-    unsigned int totalBlocks;
+    unsigned int blocksCount;
     /**
      * Cantidad total de i-nodos (heurística).
      */
-    unsigned int totalINodes;
+    unsigned int iNodesCount;
 
     /**
      * Reservado.
      */
-    char _padding[
-            SUPER_BLOCK_SIZE
-            - 12 * sizeof(unsigned int)
-    ];
+    char _padding[SUPER_BLOCK_SIZE - 12 * sizeof(unsigned int)];
 };
 
 struct Metadata {
@@ -179,12 +179,17 @@ struct INode {
     /**
      * Reservado.
      */
-    char _padding[
-            INODE_SIZE
-            - sizeof(struct Metadata)
-            - POINTERS * sizeof(unsigned int)
-    ];
+    char _padding[INODE_SIZE - sizeof(struct Metadata) - POINTERS * sizeof(unsigned int)];
 };
+
+/**
+ * Calcular tamaño en bloques en función del número de bytes.
+ *
+ * @param bytes Bytes.
+
+ * @return Tamaño en bloques.
+ */
+unsigned int block_size(unsigned int bytes);
 
 /**
  * Calcular tamaño en bloques del mapa de bits (MB).
@@ -193,7 +198,7 @@ struct INode {
  *
  * @return Tamaño en bloques del mapa de bits.
  */
-int bitmap_size(unsigned int total_blocks);
+unsigned int bitmap_size(unsigned int total_blocks);
 
 /**
  * Calcular tamaño en bloques del array de i-nodos.
@@ -202,7 +207,7 @@ int bitmap_size(unsigned int total_blocks);
  *
  * @return Tamaño en bloques del array de i-nodos.
  */
-int inodes_size(unsigned int total_inodes);
+unsigned int inodes_size(unsigned int total_inodes);
 
 /**
  * Inicializar súper bloque.
@@ -335,3 +340,12 @@ int get_physical_block(struct INode *inode, unsigned int logical_block, unsigned
  * @return 0.
  */
 int print_inode(struct Metadata *metadata, char *name);
+
+/**
+ * Comprobar que los permisos son correctos. Los permisos son correctos si es un número entre 0 y 7.
+ *
+ * @param permissions Permisos a comprobar.
+ *
+ * @return 1 si son válidos 0 en cualquier otro caso.
+ */
+int are_valid(char permissions);

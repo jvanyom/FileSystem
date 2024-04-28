@@ -10,7 +10,7 @@
  *
  * @return Bytes escritos. Puede devolver error.
  */
-int my_write(unsigned int inode_position, const void *buffer, unsigned int offset, unsigned int count);
+int my_write_file(unsigned int inode_position, const void *buffer, unsigned int offset, unsigned int count);
 
 /**
  * Leer contenido de un fichero/directorio dentro de 'buffer'.
@@ -22,7 +22,7 @@ int my_write(unsigned int inode_position, const void *buffer, unsigned int offse
  *
  * @return Bytes leídos. Puede devolver error.
  */
-int my_read(unsigned int inode_position, void *buffer, unsigned int offset, unsigned int count);
+int my_read_file(unsigned int inode_position, void *buffer, unsigned int offset, unsigned int count);
 
 /**
  * Leer metadatos de un i-nodo.
@@ -32,7 +32,7 @@ int my_read(unsigned int inode_position, void *buffer, unsigned int offset, unsi
  *
  * @return 1 si se ha leído correctamente los metadatos del i-nodo. Puede devolver error.
  */
-int my_stat(unsigned int inode_position, struct Metadata *metadata);
+int my_stat_file(unsigned int inode_position, struct Metadata *metadata);
 
 /**
  * Modificar permisos de un i-nodo.
@@ -42,7 +42,7 @@ int my_stat(unsigned int inode_position, struct Metadata *metadata);
  *
  * @return 1 si ha sido posible modificar los permisos correctamente. Puede devolver error.
  */
-int my_chmod(unsigned int inode_position, unsigned char permissions);
+int my_chmod_file(unsigned int inode_position, unsigned char permissions);
 
 /**
  * Truncar contenido de un i-nodo a los bytes indicados por 'count'.
@@ -52,4 +52,4 @@ int my_chmod(unsigned int inode_position, unsigned char permissions);
  *
  * @return Cantidad de bloques liberados. Puede devolver error.
  */
-int my_trunc(unsigned int inode_position, unsigned int count);
+int my_trunc_file(unsigned int inode_position, unsigned int count);

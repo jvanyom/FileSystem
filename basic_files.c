@@ -8,43 +8,36 @@
  *
  * @return División de los dos números redondeada hacia arriba.
  */
-int div_ceil(int dividend, int divisor) {
+unsigned int div_ceil(unsigned int dividend, unsigned int divisor) {
     return dividend / divisor + (dividend % divisor > 0);
 }
 
-/**
- * Calcula el tamaño en bloques en función del número de bytes.
- *
- * @param bytes Bytes.
-
- * @return Tamaño en bloques.
- */
-int block_size(int bytes) {
+unsigned int block_size(unsigned int bytes) {
     return div_ceil(bytes, BLOCK_SIZE);
 }
 
-int bitmap_size(unsigned int total_blocks) {
+unsigned int bitmap_size(unsigned int total_blocks) {
     return block_size(div_ceil((int) total_blocks, BYTE_LENGTH));
 }
 
-int inodes_size(unsigned int total_inodes) {
+unsigned int inodes_size(unsigned int total_inodes) {
     return block_size((int) (total_inodes * INODE_SIZE));
 }
 
 int init_super_block(unsigned int total_blocks, unsigned int total_inodes) {
     const struct SuperBlock sb = {
-            .bitMapFirstBlock = SUPER_BLOCK_POSITION + SUPER_BLOCKS_PER_BLOCK,
-            .bitMapLastBlock = sb.bitMapFirstBlock + bitmap_size(total_blocks) - 1,
-            .iNodesFirstBlock = sb.bitMapLastBlock + 1,
+            .bitmapFirstBlock = SUPER_BLOCK_POSITION + SUPER_BLOCKS_PER_BLOCK,
+            .bitmapLastBlock = sb.bitmapFirstBlock + bitmap_size(total_blocks) - 1,
+            .iNodesFirstBlock = sb.bitmapLastBlock + 1,
             .iNodesLastBlock = sb.iNodesFirstBlock + inodes_size(total_inodes) - 1,
             .dataFirstBlock = sb.iNodesLastBlock + 1,
             .dataLastBlock = total_blocks - 1,
             .rootINode = 0,
-            .firstFreeINode = 0,
-            .totalFreeBlocks = total_blocks,
-            .totalFreeINodes = total_inodes,
-            .totalBlocks = total_blocks,
-            .totalINodes = total_inodes
+            .nextFreeINodePosition = 0,
+            .freeBlocksCount = total_blocks,
+            .freeINodesCount = total_inodes,
+            .blocksCount = total_blocks,
+            .iNodesCount = total_inodes
     };
 
     return write_block(SUPER_BLOCK_POSITION, &sb);
@@ -54,15 +47,15 @@ int init_bitmap() {
     struct SuperBlock sb;
     if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
-    const int metadata_block_size = bitmap_size(sb.totalBlocks)
-                                    + inodes_size(sb.totalINodes)
-                                    + SUPER_BLOCKS_PER_BLOCK;
+    const unsigned int metadata_block_size = bitmap_size(sb.blocksCount)
+                                             + inodes_size(sb.iNodesCount)
+                                             + SUPER_BLOCKS_PER_BLOCK;
 
-    const int metadata_bytes = metadata_block_size / BYTE_LENGTH;
-    const int metadata_extra_bits = metadata_block_size % BYTE_LENGTH;
+    const unsigned int metadata_bytes = metadata_block_size / BYTE_LENGTH;
+    const unsigned int metadata_extra_bits = metadata_block_size % BYTE_LENGTH;
 
-    const int bitmap_block_size = block_size(metadata_bytes + (metadata_extra_bits > 0));
-    const int bitmap_byte_size = bitmap_block_size * BLOCK_SIZE;
+    const unsigned int bitmap_block_size = block_size(metadata_bytes + (metadata_extra_bits > 0));
+    const unsigned int bitmap_byte_size = bitmap_block_size * BLOCK_SIZE;
 
     unsigned char bitmap[bitmap_byte_size];
 
@@ -71,10 +64,10 @@ int init_bitmap() {
     bitmap[metadata_bytes] = FULL_BYTE << (BYTE_LENGTH - metadata_extra_bits);
 
     for (int i = 0; i < bitmap_block_size; ++i) {
-        if (write_block(sb.bitMapFirstBlock + i, &bitmap[i * BLOCK_SIZE]) < 0) return FAILURE;
+        if (write_block(sb.bitmapFirstBlock + i, &bitmap[i * BLOCK_SIZE]) < 0) return FAILURE;
     }
 
-    sb.totalFreeBlocks -= metadata_block_size;
+    sb.freeBlocksCount -= metadata_block_size;
 
     if (write_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
@@ -87,12 +80,12 @@ int init_inodes() {
 
     struct INode inodes[INODES_PER_BLOCK];
 
-    unsigned int next_inode = sb.firstFreeINode + 1;
+    unsigned int next_inode = sb.nextFreeINodePosition + 1;
 
     for (unsigned int i = sb.iNodesFirstBlock; i <= sb.iNodesLastBlock; ++i) {
         for (int j = 0; j < INODES_PER_BLOCK; ++j) {
             inodes[j].directPointers[0] = next_inode++;
-            inodes[j].metadata.type = FREE_INODE;
+            inodes[j].metadata.type = INODE_FREE;
         }
 
         if (i == sb.iNodesLastBlock) inodes[INODES_PER_BLOCK - 1].directPointers[0] = UINT_MAX;
@@ -108,7 +101,7 @@ int set_block_state(unsigned int physical_block, unsigned int state) {
     if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     const unsigned int block_byte = physical_block / BYTE_LENGTH;
-    const unsigned int absolute_block = sb.bitMapFirstBlock + (block_byte / BLOCK_SIZE);
+    const unsigned int absolute_block = sb.bitmapFirstBlock + (block_byte / BLOCK_SIZE);
 
     unsigned char bitmap[BLOCK_SIZE];
     if (read_block(absolute_block, bitmap) < 0) return FAILURE;
@@ -131,7 +124,7 @@ char get_block_state(unsigned int physical_block) {
     if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
     const unsigned int block_byte = physical_block / BYTE_LENGTH;
-    const unsigned int absolute_block = sb.bitMapFirstBlock + (block_byte / BLOCK_SIZE);
+    const unsigned int absolute_block = sb.bitmapFirstBlock + (block_byte / BLOCK_SIZE);
 
     unsigned char bitmap[BLOCK_SIZE];
     if (read_block(absolute_block, bitmap) < 0) return FAILURE;
@@ -143,9 +136,9 @@ int reserve_block() {
     struct SuperBlock sb;
     if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
-    if (sb.totalFreeBlocks == 0) return FAILURE;
+    if (sb.freeBlocksCount == 0) return FAILURE;
 
-    unsigned int bitmap_block_length = sb.bitMapLastBlock - sb.bitMapFirstBlock;
+    unsigned int bitmap_block_length = sb.bitmapLastBlock - sb.bitmapFirstBlock;
 
     int bitmap_block = -1;
 
@@ -157,7 +150,7 @@ int reserve_block() {
     const unsigned char empty_block[BLOCK_SIZE] = {0};
 
     do {
-        if (read_block(sb.bitMapFirstBlock + ++bitmap_block, bitmap) < 0) return FAILURE;
+        if (read_block(sb.bitmapFirstBlock + ++bitmap_block, bitmap) < 0) return FAILURE;
 
     } while (memcmp(bitmap, full_block, BLOCK_SIZE) == 0 && bitmap_block < bitmap_block_length);
 
@@ -172,7 +165,7 @@ int reserve_block() {
 
         if (set_block_state(block_position, BUSY_BLOCK) < 0) return FAILURE;
 
-        sb.totalFreeBlocks--;
+        sb.freeBlocksCount--;
 
         if (write_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
         if (write_block(block_position, empty_block) < 0) return FAILURE;
@@ -187,11 +180,11 @@ int free_block(unsigned int physical_block) {
     struct SuperBlock sb;
     if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
-    if (sb.totalBlocks == sb.totalFreeBlocks) return (int) physical_block;
+    if (sb.blocksCount == sb.freeBlocksCount) return (int) physical_block;
 
     if (set_block_state(physical_block, FREE_BLOCK) < 0) return FAILURE;
 
-    sb.totalFreeBlocks++;
+    sb.freeBlocksCount++;
 
     if (write_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
@@ -232,14 +225,14 @@ int reserve_inode(unsigned char type, unsigned char permissions) {
     struct SuperBlock sb;
     if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
-    if (sb.totalFreeINodes == 0) return FAILURE;
+    if (sb.freeINodesCount == 0) return FAILURE;
 
-    const unsigned int inode_position = sb.firstFreeINode;
+    const unsigned int inode_position = sb.nextFreeINodePosition;
 
     struct INode inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
-    sb.firstFreeINode = inode.directPointers[0];
+    sb.nextFreeINodePosition = inode.directPointers[0];
 
     inode.metadata.type = type;
     inode.metadata.permissions = permissions;
@@ -255,7 +248,7 @@ int reserve_inode(unsigned char type, unsigned char permissions) {
 
     if (write_inode(inode_position, &inode) < 0) return FAILURE;
 
-    sb.totalFreeINodes--;
+    sb.freeINodesCount--;
 
     if (write_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
@@ -531,14 +524,14 @@ int free_inode(unsigned int inode_position) {
     inode.metadata.modifiedAt = time(NULL);
     inode.metadata.busyBlocksCount -= freed_blocks;
     inode.metadata.size = 0;
-    inode.metadata.type = FREE_INODE;
+    inode.metadata.type = INODE_FREE;
 
     struct SuperBlock sb;
     if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
-    inode.directPointers[0] = sb.firstFreeINode;
-    sb.firstFreeINode = inode_position;
-    sb.totalFreeINodes++;
+    inode.directPointers[0] = sb.nextFreeINodePosition;
+    sb.nextFreeINodePosition = inode_position;
+    sb.freeINodesCount++;
 
     if (write_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
     if (write_inode(inode_position, &inode) < 0) return FAILURE;
@@ -547,7 +540,7 @@ int free_inode(unsigned int inode_position) {
 }
 
 int print_inode(struct Metadata *metadata, char *name) {
-    printf("\n *** %s ***\n", name);
+    if (name != NULL) printf("\n *** %s ***\n", name);
 
     printf(
             "Tipo: %c\n"
@@ -571,4 +564,8 @@ int print_inode(struct Metadata *metadata, char *name) {
     );
 
     return SUCCESS;
+}
+
+int are_valid(char permissions) {
+    return permissions >= 0 && permissions <= RWX;
 }
