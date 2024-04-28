@@ -72,9 +72,8 @@ int main(int argc, char **argv) {
         );
 
         if (read_bytes < 0) return print_error(read_bytes);
-        if (read_bytes == 0) return EXIT_SUCCESS;
+        if (read_bytes) print_entry(&inode.metadata, entry.filename, is_extended);
 
-        print_entry(&inode.metadata, entry.filename, is_extended);
         return EXIT_SUCCESS;
     }
 

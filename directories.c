@@ -38,7 +38,7 @@ int split_path(const char *path, char *initial, char *final) {
  * @param path Ruta parcial al fichero. Es una ruta absoluta.
  * @param parent_inode_position Posición del i-nodo del directorio padre.
  * @param entry_position Posición de la entrada consultada.
- * @param create 0 permite consultar y 1 permite consultar y crear nueva nueva entrada.
+ * @param create 0 permite consultar y 1 permite crear nueva nueva entrada.
  * @param permissions Permisos que se le asignan al fichero en el caso que 'reserve = 1'.
  * @param type Tipo de entrada que tiene que crear. INODE_DIR o INODE_FILE.
  *
@@ -67,23 +67,23 @@ int find_entry(const char *path, unsigned int *parent_inode_position, unsigned i
         for (int entry = 0; entry < read_bytes / ENTRY_SIZE; ++entry) {
             struct Entry *e = entries + entry;
 
-            if (strcmp(e->filename, initial_path) == 0) {
-                if (strcmp(final_path, EMPTY_STR) == 0 || strcmp(final_path, SLASH_STR) == 0) {
-                    if (entry_position) *entry_position = entry;
+            if (strcmp(e->filename, initial_path) != 0) continue;
 
-                    return create ? FILE_ALREADY_EXISTS : (int) e->inodePosition;
-                }
+            if (strcmp(final_path, EMPTY_STR) == 0 || strcmp(final_path, SLASH_STR) == 0) {
+                if (entry_position) *entry_position = entry;
 
-                *parent_inode_position = e->inodePosition;
-
-                return find_entry(final_path, parent_inode_position, entry_position, create, permissions, type);
+                return create ? FILE_ALREADY_EXISTS : (int) e->inodePosition;
             }
+
+            *parent_inode_position = e->inodePosition;
+
+            return find_entry(final_path, parent_inode_position, entry_position, create, permissions, type);
         }
     }
 
-    const unsigned int bad_path = create == NO_CREATE ||
-                                  (type == INODE_FILE && strcmp(final_path, SLASH_STR) == 0) ||
-                                  (strcmp(final_path, EMPTY_STR) != 0 && strcmp(final_path, SLASH_STR) != 0);
+    const int bad_path = create == NO_CREATE
+                         || (type == INODE_FILE && strcmp(final_path, SLASH_STR) == 0)
+                         || (strcmp(final_path, EMPTY_STR) != 0 && strcmp(final_path, SLASH_STR) != 0);
 
     if (bad_path) return FILE_NOT_EXISTS;
 
