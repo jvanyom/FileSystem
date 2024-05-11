@@ -12,6 +12,7 @@ const static char *errors[] = {
         "El archivo especificado no existe",
         "El archivo especificado ya existe",
         "El archivo especificado es un fichero",
+        "El archivo especificado no es un fichero",
         "No ha sido posible crear correctamente el recurso"
 };
 

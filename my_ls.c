@@ -1,27 +1,28 @@
 #include "directories.h"
 
-void strfperms(unsigned char permissions, char *buffer) {
+#define PERMS_LENGTH 4
+
+void format_perms(unsigned char permissions, char *buffer) {
     buffer[0] = permissions & READ ? 'r' : HYPHEN;
     buffer[1] = permissions & WRITE ? 'w' : HYPHEN;
     buffer[2] = permissions & EXEC ? 'x' : HYPHEN;
     buffer[3] = EOL;
 }
 
-int print_entry(const struct Metadata *m, const char *filename, const int is_extended) {
+int print_entry(const metadata_t *m, const char *filename, const int is_extended) {
     if (!is_extended) return printf("%s%s "RESET, m->type == INODE_DIR ? LIGHT_BLUE : EMPTY_STR, filename);
 
     const static char *entry_format = "%-4c %-8s %-19s %-8d %s%-s\n"RESET;
-    const static char *date_format = "%Y-%m-%d %H:%M:%S";
 
-    char permissions[4];
-    strfperms(m->permissions, permissions);
+    char permissions[PERMS_LENGTH];
+    format_perms(m->permissions, permissions);
 
-    char time[20];
-    strftime(time, 20, date_format, localtime(&m->modifiedAt));
+    char modified_at[DATETIME_LENGTH];
+    format_datetime(modified_at, &m->modified_at);
 
     return printf(
             entry_format,
-            m->type, permissions, time, m->size, m->type == INODE_DIR ? LIGHT_BLUE : EMPTY_STR, filename
+            m->type, permissions, modified_at, m->size, m->type == INODE_DIR ? LIGHT_BLUE : EMPTY_STR, filename
     );
 }
 
@@ -51,7 +52,7 @@ int main(int argc, char **argv) {
     const int path_inode = get_inode(argv[is_extended ? 3 : 2], &parent_inode_position, &entry_position);
     if (path_inode < 0) return print_error(path_inode);
 
-    struct INode inode;
+    inode_t inode;
     if (read_inode(path_inode, &inode) < 0) return print_unexpected();
 
     if ((inode.metadata.permissions & READ) == 0) return print_error(NO_READ_PERMISSIONS);
@@ -62,7 +63,7 @@ int main(int argc, char **argv) {
     if (is_extended) print_header();
 
     if (!is_dir) {
-        struct Entry entry;
+        dentry_t entry;
 
         const int read_bytes = my_read_file(
                 parent_inode_position,
@@ -77,9 +78,9 @@ int main(int argc, char **argv) {
         return EXIT_SUCCESS;
     }
 
-    struct Entry entries[ENTRIES_PER_BLOCK];
+    dentry_t entries[ENTRIES_PER_BLOCK];
 
-    for (int block = 0; block < inode.metadata.busyBlocksCount; ++block) {
+    for (int block = 0; block < inode.metadata.busy_blocks_count; ++block) {
         const int read_bytes = my_read_file(
                 path_inode,
                 entries,
@@ -91,11 +92,11 @@ int main(int argc, char **argv) {
         if (read_bytes == 0) return EXIT_SUCCESS;
 
         for (int entry = 0; entry < read_bytes / ENTRY_SIZE; ++entry) {
-            if (read_inode(entries[entry].inodePosition, &inode) < 0) return print_unexpected();
+            if (read_inode(entries[entry].inode_position, &inode) < 0) return print_unexpected();
 
             print_entry(&inode.metadata, entries[entry].filename, is_extended);
         }
     }
 
-    return EXIT_SUCCESS;
+    return umount() < 0 ? print_unexpected() : EXIT_SUCCESS;
 }

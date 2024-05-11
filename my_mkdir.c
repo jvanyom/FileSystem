@@ -3,9 +3,6 @@
 int main(int argc, char **argv) {
     if (argc != 4) return print_error(SYNTAX, argv[0], "<dispositivo> <permisos> <ruta>");
 
-    if (access(argv[1], F_OK) != 0) return print_error(DEV_NOT_EXISTS, argv[1]);
-    if (mount(argv[1]) < 0) return print_error(MOUNT, argv[1]);
-
     char *path = argv[3];
     if (*path != SLASH) return print_error(FILE_NOT_EXISTS);
 
@@ -13,7 +10,11 @@ int main(int argc, char **argv) {
     if (errno == EINVAL) return print_error(NAN, "permisos");
     if (!are_valid(permissions)) return print_error(NOT_VALID_PERMISSIONS);
 
-    const int error = create_entry(path, permissions, INODE_DIR);
+    if (access(argv[1], F_OK) != 0) return print_error(DEV_NOT_EXISTS, argv[1]);
+    if (mount(argv[1]) < 0) return print_error(MOUNT, argv[1]);
 
-    return error < 0 ? print_error(error < FAILURE ? error : NOT_CREATED) : EXIT_SUCCESS;
+    const int inode_position = create_entry(path, permissions, INODE_DIR);
+    if (inode_position < 0) print_error(inode_position < FAILURE ? inode_position : NOT_CREATED);
+
+    return umount() < 0 ? print_unexpected() : EXIT_SUCCESS;
 }

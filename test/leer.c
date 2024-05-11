@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     const unsigned int inode_position = strtol(argv[2], NULL, 10);
     if (errno == EINVAL) return print_error(NAN, "número de i-nodo");
 
-    struct INode inode;
+    inode_t inode;
     if (read_inode(inode_position, &inode) < 0) {
         return print_cerror("No ha sido posible leer correctamente el i-nodo %d", inode_position);
     }

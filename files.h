@@ -30,9 +30,9 @@ int my_read_file(unsigned int inode_position, void *buffer, unsigned int offset,
  * @param inode_position Posición del i-nodo del que se quieren consultar los metadatos.
  * @param metadata Puntero al contenedor de los metadatos.
  *
- * @return 1 si se ha leído correctamente los metadatos del i-nodo. Puede devolver error.
+ * @return 0 si se ha leído correctamente los metadatos del i-nodo. Puede devolver error.
  */
-int my_stat_file(unsigned int inode_position, struct Metadata *metadata);
+int my_stat_file(unsigned int inode_position, metadata_t *metadata);
 
 /**
  * Modificar permisos de un i-nodo.

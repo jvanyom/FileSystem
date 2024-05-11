@@ -1,14 +1,14 @@
 #include "../directories.h"
 
 #define DEBUG_SUPER_BLOCK 1
-#define DEBUG_INODES 0
+#define DEBUG_ALL_INODES 0
 #define DEBUG_BITMAP 0
 #define DEBUG_BLOCKS 0
 #define DEBUG_ROOT_INODE 0
 #define DEBUG_BLOCK_TRANSLATION 0
 #define DEBUG_FIND_DIR 0
 
-int print_super_block(struct SuperBlock *sb) {
+int print_super_block(super_block_t *sb) {
     if (read_block(SUPER_BLOCK_POSITION, sb) < 0) {
         return print_cerror("No ha sido posible leer correctamente el súper bloque");
     }
@@ -35,32 +35,32 @@ int print_super_block(struct SuperBlock *sb) {
             "Cantidad de bloques: %d\n"
             "Cantidad de i-nodos: %d\n"
             "-------------------------------------\n",
-            sb->bitmapFirstBlock, sb->bitmapLastBlock,
-            sb->iNodesFirstBlock, sb->iNodesLastBlock,
-            sb->dataFirstBlock, sb->dataLastBlock,
-            sb->rootINode, sb->nextFreeINodePosition,
-            sb->freeBlocksCount, sb->freeINodesCount,
-            sb->blocksCount, sb->iNodesCount
+            sb->bitmap_first_block, sb->bitmap_last_block,
+            sb->inodes_first_block, sb->inodes_last_block,
+            sb->data_first_block, sb->data_last_block,
+            sb->root_inode, sb->next_free_inode_position,
+            sb->free_blocks_count, sb->free_inodes_count,
+            sb->blocks_count, sb->inodes_count
     );
 
-    printf("Tamaño súper bloque: %lu\n", sizeof(struct SuperBlock));
-    printf("Tamaño i-nodo: %lu\n", sizeof(struct INode));
+    printf("Tamaño súper bloque: %lu\n", sizeof(super_block_t));
+    printf("Tamaño i-nodo: %lu\n", sizeof(inode_t));
 
     return SUCCESS;
 }
 
-int print_inodes(struct SuperBlock *sb) {
+int print_inodes(super_block_t *sb) {
     printf("\n*** I-NODOS ***\n");
 
-    struct INode inodes[INODES_PER_BLOCK];
+    inode_t inodes[INODES_PER_BLOCK];
 
-    for (unsigned int i = sb->iNodesFirstBlock; i <= sb->iNodesLastBlock; ++i) {
+    for (unsigned int i = sb->inodes_first_block; i <= sb->inodes_last_block; ++i) {
         if (read_block(i, &inodes) < 0) {
             return print_cerror("No ha sido posible leer correctamente el bloque físico %d", i);
         }
 
         for (unsigned int j = 0; j < INODES_PER_BLOCK; ++j) {
-            printf("%d, ", inodes[j].directPointers[0]);
+            printf("%d, ", inodes[j].direct[0]);
         }
 
         printf("\n");
@@ -78,21 +78,21 @@ int print_block_state(unsigned int block) {
     return SUCCESS;
 }
 
-int print_bitmap(struct SuperBlock *sb) {
+int print_bitmap(super_block_t *sb) {
     printf("\n*** BITMAP ***\n");
 
     return (
             print_block_state(SUPER_BLOCK_POSITION) < 0 ||
-            print_block_state(sb->bitmapFirstBlock) < 0 ||
-            print_block_state(sb->bitmapLastBlock) < 0 ||
-            print_block_state(sb->iNodesFirstBlock) < 0 ||
-            print_block_state(sb->iNodesLastBlock) < 0 ||
-            print_block_state(sb->dataFirstBlock) < 0 ||
-            print_block_state(sb->dataLastBlock) < 0
+            print_block_state(sb->bitmap_first_block) < 0 ||
+            print_block_state(sb->bitmap_last_block) < 0 ||
+            print_block_state(sb->inodes_first_block) < 0 ||
+            print_block_state(sb->inodes_last_block) < 0 ||
+            print_block_state(sb->data_first_block) < 0 ||
+            print_block_state(sb->data_last_block) < 0
     );
 }
 
-int print_blocks(struct SuperBlock *sb) {
+int print_blocks(super_block_t *sb) {
     printf("\n*** RESERVA Y LIBERACIÓN DE BLOQUES ***\n");
 
     const int block = reserve_block();
@@ -104,7 +104,7 @@ int print_blocks(struct SuperBlock *sb) {
         return print_cerror("No ha sido posible leer correctamente el súper bloque");
     }
 
-    printf("Bloques libres: %d\n", sb->freeBlocksCount);
+    printf("Bloques libres: %d\n", sb->free_blocks_count);
 
     if (free_block(block) < 0) {
         return print_cerror("No ha sido posible liberar correctamente el bloque %d", block);
@@ -116,16 +116,16 @@ int print_blocks(struct SuperBlock *sb) {
         return print_cerror("No ha sido posible leer correctamente el súper bloque");
     }
 
-    printf("Bloques libres: %d\n", sb->freeBlocksCount);
+    printf("Bloques libres: %d\n", sb->free_blocks_count);
 
     return SUCCESS;
 }
 
-int print_root_inode(struct SuperBlock *sb) {
-    struct INode root;
+int print_root_inode(super_block_t *sb) {
+    inode_t root;
 
-    if (read_inode(sb->rootINode, &root) < 0) {
-        return print_cerror("No ha sido posible leer correctamente el i-nodo raíz (%d)", sb->rootINode);
+    if (read_inode(sb->root_inode, &root) < 0) {
+        return print_cerror("No ha sido posible leer correctamente el i-nodo raíz (%d)", sb->root_inode);
     }
 
     return print_inode(&root.metadata, "RAÍZ");
@@ -139,7 +139,7 @@ int print_logical_blocks_translation() {
     const int inode_position = reserve_inode(INODE_FILE, READ | WRITE);
     if (inode_position < 0) return print_cerror("No ha sido posible reservar un nuevo i-nodo");
 
-    struct INode inode;
+    inode_t inode;
     if (read_inode(inode_position, &inode) < 0) {
         return print_cerror("No ha sido posible leer correctamente el i-nodo %d", inode_position);
     }
@@ -160,8 +160,11 @@ int print_find_entry(char *path, unsigned char create, unsigned char type) {
     printf("\nRuta: %s | Crear: %d\n", path, create);
     printf("\n********************************************************************\n");
 
-    const int error = create ? create_entry(path, RW, type) : get_inode(path, NULL, NULL);
-    if (error < 0) return print_error(error);
+    const int inode_position = create
+                               ? create_entry(path, RW, type)
+                               : get_inode(path, NULL, NULL);
+
+    if (inode_position < 0) return print_error(inode_position);
 
     return SUCCESS;
 }
@@ -187,12 +190,12 @@ int main(int argc, char **argv) {
     if (argc != 2) return print_error(SYNTAX, argv[0], "<dispositivo>");
     if (mount(argv[1]) < 0) return print_error(MOUNT, argv[1]);
 
-    struct SuperBlock sb;
+    super_block_t sb;
 
 #if DEBUG_SUPER_BLOCK
     if (print_super_block(&sb) < 0) return EXIT_FAILURE;
 #endif
-#if DEBUG_INODES
+#if DEBUG_ALL_INODES
     if (print_inodes(&sb) < 0) return EXIT_FAILURE;
 #endif
 #if DEBUG_BITMAP

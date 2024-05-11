@@ -19,13 +19,13 @@ int main(int argc, char **argv) {
 
     const unsigned int total_inodes = total_blocks >> 2;
 
-    const signed int failed = mount(argv[1]) < 0 ||
-                              clear_all_blocks(total_blocks) < 0 ||
-                              init_super_block(total_blocks, total_inodes) < 0 ||
-                              init_bitmap() < 0 ||
-                              init_inodes() < 0 ||
-                              reserve_inode(INODE_DIR, RWX) < 0 ||
-                              umount() < 0;
+    const int failed = mount(argv[1]) < 0 ||
+                       clear_all_blocks(total_blocks) < 0 ||
+                       init_super_block(total_blocks, total_inodes) < 0 ||
+                       init_bitmap() < 0 ||
+                       init_inodes() < 0 ||
+                       reserve_inode(INODE_DIR, RWX) < 0 ||
+                       umount() < 0;
 
     return failed ? print_error(MOUNT, argv[1]) : EXIT_SUCCESS;
 }

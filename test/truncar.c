@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    struct Metadata metadata;
+    metadata_t metadata;
     if (my_stat_file(inode_position, &metadata) < 0) {
         return print_cerror("No ha sido posible leer correctamente el i-nodo %d", inode_position);
     }

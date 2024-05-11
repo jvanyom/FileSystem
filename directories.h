@@ -1,20 +1,22 @@
 #include "files.h"
+#include "dcache.h"
 
-#define ENTRY_SIZE sizeof(struct Entry)
-#define ENTRIES_PER_BLOCK (BLOCK_SIZE / ENTRY_SIZE)
+#define DEBUG_ENTRIES 0
+
 #define FILENAME_SIZE 60
 
 #define EMPTY_STR ""
 #define SLASH_STR "/"
 
 #define HYPHEN '-'
-#define SLASH '/'
-#define EOL '\0'
 
-struct Entry {
+#define ENTRY_SIZE sizeof(dentry_t)
+#define ENTRIES_PER_BLOCK (BLOCK_SIZE / ENTRY_SIZE)
+
+typedef struct {
+    unsigned int inode_position;
     char filename[FILENAME_SIZE];
-    unsigned int inodePosition;
-};
+} dentry_t;
 
 /**
  * Obtener el número de i-nodo a partir de la ruta del archivo.
@@ -55,4 +57,26 @@ int my_chmod(const char *path, unsigned char new_permissions);
  *
  * @return Número del i-nodo correspondiente a la ruta especificada. Puede devolver error.
  */
-int my_stat(const char *path, struct Metadata *metadata);
+int my_stat(const char *path, metadata_t *metadata);
+
+/**
+ * Escribir contenido en un fichero a partir de su ruta.
+ *
+ * @param path Ruta del fichero donde se quiere escribir.
+ * @param buffer Datos a escribir.
+ * @param offset Byte a partir del que se quiere escribir.
+ * @param count Número de bytes a escribir.
+ *
+ * @return Bytes escritos.
+ */
+int my_write(const char *path, const void *buffer, unsigned int offset, unsigned int count);
+
+/**
+ *
+ * @param path
+ * @param buffer
+ * @param offset
+ * @param count
+ * @return
+ */
+int my_read(const char *path, void *buffer, unsigned int offset, unsigned int count);

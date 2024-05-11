@@ -17,12 +17,14 @@
 #define FILE_NOT_EXISTS (-9)
 #define FILE_ALREADY_EXISTS (-10)
 #define IS_FILE (-11)
-#define NOT_CREATED (-12)
+#define IS_NOT_FILE (-12)
+#define NOT_CREATED (-13)
 
 #define RESET       "\x1b[0m"
 #define RED         "\x1b[31m"
 #define LIGHT_GRAY  "\x1b[90m"
 #define LIGHT_BLUE  "\x1B[38;2;53;149;240m"
+#define MAGENTA     "\x1b[35m"
 
 /**
  * Mostrar error personalizado.

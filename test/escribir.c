@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     int inode_position = inodes_num == 0 ? reserve_inode(INODE_FILE, RW) : 0;
     if (inode_position < 0) return print_cerror("No ha sido posible reservar un nuevo i-nodo");
 
-    struct Metadata metadata;
+    metadata_t metadata;
 
     for (int i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
         if (inodes_num == 1) {
@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
         printf("Offset: %d\n", offsets[i]);
         printf("Bytes escritos: %d\n", wrote_bytes);
         printf("Tamaño en bytes lógicos: %d\n", metadata.size);
-        printf("Bloques ocupados: %d\n", metadata.busyBlocksCount);
+        printf("Bloques ocupados: %d\n", metadata.busy_blocks_count);
         printf("--------------------------------------------------------\n");
     }
 

@@ -46,6 +46,7 @@ int split_path(const char *path, char *initial, char *final) {
  */
 int find_entry(const char *path, unsigned int *parent_inode_position, unsigned int *entry_position,
                unsigned char create, unsigned char permissions, unsigned char type) {
+
     if (strcmp(path, SLASH_STR) == 0) return create ? FILE_ALREADY_EXISTS : (int) *parent_inode_position;
 
     char initial_path[FILENAME_SIZE] = {0};
@@ -53,29 +54,36 @@ int find_entry(const char *path, unsigned int *parent_inode_position, unsigned i
 
     if (split_path(path, initial_path, final_path) < 0) return FILE_NOT_EXISTS;
 
-    debug("Inicial: %s | Final: %s | Crear: %d", initial_path, final_path, create);
+    debug(DEBUG_ENTRIES, "Inicial: %s | Final: %s | Crear: %d", initial_path, final_path, create);
 
-    struct INode parent_inode;
+    inode_t parent_inode;
     if (read_inode(*parent_inode_position, &parent_inode) < 0) return FAILURE;
 
-    struct Entry entries[ENTRIES_PER_BLOCK];
+    dentry_t entries[ENTRIES_PER_BLOCK];
 
-    for (int block = 0; block < parent_inode.metadata.busyBlocksCount; ++block) {
-        int read_bytes = my_read_file(*parent_inode_position, entries, block * BLOCK_SIZE, BLOCK_SIZE);
+    for (int block = 0; block < parent_inode.metadata.busy_blocks_count; ++block) {
+        int read_bytes = my_read_file(
+                *parent_inode_position,
+                entries,
+                block * BLOCK_SIZE,
+                BLOCK_SIZE
+        );
+
         if (read_bytes < 0) return read_bytes;
 
         for (int entry = 0; entry < read_bytes / ENTRY_SIZE; ++entry) {
-            struct Entry *e = entries + entry;
+            dentry_t *e = entries + entry;
 
             if (strcmp(e->filename, initial_path) != 0) continue;
 
             if (strcmp(final_path, EMPTY_STR) == 0 || strcmp(final_path, SLASH_STR) == 0) {
+                if (create) return FILE_ALREADY_EXISTS;
                 if (entry_position) *entry_position = entry;
 
-                return create ? FILE_ALREADY_EXISTS : (int) e->inodePosition;
+                return (int) e->inode_position;
             }
 
-            *parent_inode_position = e->inodePosition;
+            *parent_inode_position = e->inode_position;
 
             return find_entry(final_path, parent_inode_position, entry_position, create, permissions, type);
         }
@@ -94,11 +102,14 @@ int find_entry(const char *path, unsigned int *parent_inode_position, unsigned i
     int new_inode_position = reserve_inode(type, permissions);
     if (new_inode_position < 0) return new_inode_position;
 
-    debug("Se ha reservado el i-nodo %d tipo '%c' con permisos %d para %s", new_inode_position, type, RW, initial_path);
+    debug(DEBUG_ENTRIES,
+          "Se ha reservado el i-nodo %d tipo '%c' con permisos %d para %s",
+          new_inode_position, type, RW, initial_path
+    );
 
-    struct Entry new_entry = {0};
+    dentry_t new_entry = {0};
     strcpy(new_entry.filename, initial_path);
-    new_entry.inodePosition = new_inode_position;
+    new_entry.inode_position = new_inode_position;
 
     int wrote_bytes = my_write_file(
             *parent_inode_position,
@@ -107,32 +118,43 @@ int find_entry(const char *path, unsigned int *parent_inode_position, unsigned i
             ENTRY_SIZE
     );
 
-    if (wrote_bytes < 0 && free_inode(new_entry.inodePosition) < 0) return FAILURE;
+    if (wrote_bytes < 0 && free_inode(new_entry.inode_position) < 0) return FAILURE;
 
-    debug("Se ha creado la entrada: '%s' | %d", new_entry.filename, new_entry.inodePosition);
+    debug(DEBUG_ENTRIES, "Se ha creado la entrada: '%s' | %d", new_entry.filename, new_entry.inode_position);
     return new_inode_position;
 }
 
 int get_inode(const char *path, unsigned int *parent_inode_position, unsigned int *entry_position) {
-    struct SuperBlock sb;
+#ifdef CACHE
+    const int dcache_inode_position = dcache_get(path);
+    if (dcache_inode_position >= 0) return dcache_inode_position;
+#endif
+
+    super_block_t sb;
     if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
-    if (parent_inode_position) *parent_inode_position = sb.rootINode;
+    if (parent_inode_position) *parent_inode_position = sb.root_inode;
 
-    return find_entry(
+    const int inode_position = find_entry(
             path,
-            parent_inode_position ?: &sb.rootINode,
+            parent_inode_position ?: &sb.root_inode,
             entry_position,
             NO_CREATE,
             0, 0
     );
+
+#ifdef CACHE
+    if (inode_position >= 0 && dcache_set(path, inode_position) < 0) return FAILURE;
+#endif
+
+    return inode_position;
 }
 
 int create_entry(const char *path, unsigned char permissions, unsigned char type) {
-    struct SuperBlock sb;
+    super_block_t sb;
     if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
-    return find_entry(path, &sb.rootINode, NULL, CREATE, permissions, type);
+    return find_entry(path, &sb.root_inode, NULL, CREATE, permissions, type);
 }
 
 int my_chmod(const char *path, unsigned char new_permissions) {
@@ -142,9 +164,31 @@ int my_chmod(const char *path, unsigned char new_permissions) {
     return my_chmod_file(inode_position, new_permissions) < 0 ? FAILURE : inode_position;
 }
 
-int my_stat(const char *path, struct Metadata *metadata) {
+int my_stat(const char *path, metadata_t *metadata) {
     int inode_position = get_inode(path, NULL, NULL);
     if (inode_position < 0) return inode_position;
 
     return my_stat_file(inode_position, metadata) < 0 ? FAILURE : inode_position;
+}
+
+int my_write(const char *path, const void *buffer, unsigned int offset, unsigned int count) {
+    const int inode_position = get_inode(path, NULL, NULL);
+    if (inode_position < 0) return inode_position;
+
+    inode_t inode;
+    if (read_inode(inode_position, &inode) < 0) return FAILURE;
+    if (inode.metadata.type != INODE_FILE) return IS_NOT_FILE;
+
+    return my_write_file(inode_position, buffer, offset, count);
+}
+
+int my_read(const char *path, void *buffer, unsigned int offset, unsigned int count) {
+    const int inode_position = get_inode(path, NULL, NULL);
+    if (inode_position < 0) return inode_position;
+
+    inode_t inode;
+    if (read_inode(inode_position, &inode) < 0) return FAILURE;
+    if (inode.metadata.type != INODE_FILE) return IS_NOT_FILE;
+
+    return my_read_file(inode_position, buffer, offset, count);
 }

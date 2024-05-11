@@ -3,6 +3,8 @@
 
 #include "blocks.h"
 
+#define DEBUG_INODES 0
+
 #define SUPER_BLOCK_SIZE BLOCK_SIZE
 #define INODE_SIZE 128
 
@@ -49,10 +51,11 @@
 
 #define NUM_LEVELS 4
 
-#define DEBUG 1
+#define DATETIME_FORMAT ("%Y-%m-%d %H:%M:%S")
+#define DATETIME_LENGTH 20
 
-#define debug(fmt, ...) \
-        do { if (DEBUG) fprintf(\
+#define debug(d, fmt, ...) \
+        do { if (d) fprintf(\
                             stderr, LIGHT_GRAY"[%s:%d:%s(): " fmt "]\n"RESET, \
                             __FILE__, __LINE__, __func__, __VA_ARGS__\
                         ); \
@@ -61,68 +64,68 @@
 /**
  * Súper bloque del sistema de ficheros. Almacena toda la metainformación relevante de este.
  */
-struct SuperBlock {
+typedef struct {
     /**
      * Posición absoluta del primer bloque del mapa de bits.
      */
-    unsigned int bitmapFirstBlock;
+    unsigned int bitmap_first_block;
     /**
      * Posición absoluta del último bloque del mapa de bits.
      */
-    unsigned int bitmapLastBlock;
+    unsigned int bitmap_last_block;
 
     /**
      * Posición absoluta del primer bloque del array de i-nodos.
      */
-    unsigned int iNodesFirstBlock;
+    unsigned int inodes_first_block;
     /**
      * Posición absoluta del último bloque del array de i-nodos.
      */
-    unsigned int iNodesLastBlock;
+    unsigned int inodes_last_block;
 
     /**
      * Posición absoluta del primer bloque de datos.
      */
-    unsigned int dataFirstBlock;
+    unsigned int data_first_block;
     /**
      * Posición absoluta del último bloque de datos.
      */
-    unsigned int dataLastBlock;
+    unsigned int data_last_block;
 
     /**
      * Posición del i-nodo del directorio raíz (relativa al array de i-nodos).
      */
-    unsigned int rootINode;
+    unsigned int root_inode;
     /**
      * Posición del primer i-nodo libre (relativa al array de i-nodos).
      */
-    unsigned int nextFreeINodePosition;
+    unsigned int next_free_inode_position;
 
     /**
      * Cantidad de bloques libres (en el disco completo).
      */
-    unsigned int freeBlocksCount;
+    unsigned int free_blocks_count;
     /**
      * Cantidad de i-nodos libres (en el array de i-nodos).
      */
-    unsigned int freeINodesCount;
+    unsigned int free_inodes_count;
 
     /**
      * Cantidad total de bloques del disco.
      */
-    unsigned int blocksCount;
+    unsigned int blocks_count;
     /**
      * Cantidad total de i-nodos (heurística).
      */
-    unsigned int iNodesCount;
+    unsigned int inodes_count;
 
     /**
      * Reservado.
      */
-    char _padding[SUPER_BLOCK_SIZE - 12 * sizeof(unsigned int)];
-};
+    char __padding[SUPER_BLOCK_SIZE - 12 * sizeof(unsigned int)];
+} super_block_t;
 
-struct Metadata {
+typedef struct {
     /**
      * Directorio, fichero o libre.
      */
@@ -132,25 +135,25 @@ struct Metadata {
      */
     unsigned char permissions;
 
-    unsigned char _memoryAlignment[6];
+    unsigned char __memoryAlignment[6];
 
     /**
      * Fecha y hora del último acceso a datos.
      */
-    time_t dataAccessedAt;
+    time_t data_accessed_at;
     /**
      * Fecha y hora de la última modificación de datos.
      */
-    time_t dataModifiedAt;
+    time_t data_modified_at;
     /**
      * Fecha y hora de la última modificación del i-nodo.
      */
-    time_t modifiedAt;
+    time_t modified_at;
 
     /**
      * Cantidad de enlaces de entradas en directorio.
      */
-    unsigned int linksCount;
+    unsigned int links_count;
     /**
      * Tamaño en bytes lógicos (EOF).
      */
@@ -158,29 +161,29 @@ struct Metadata {
     /**
      * Cantidad de bloques ocupados por la zona de datos.
      */
-    unsigned int busyBlocksCount;
-};
+    unsigned int busy_blocks_count;
+} metadata_t;
 
-struct INode {
+typedef struct {
     /**
      * Metadatos del i-nodo.
      */
-    struct Metadata metadata;
+    metadata_t metadata;
 
     /**
      * Apuntan directamente a bloques de datos.
      */
-    unsigned int directPointers[DIRECT_POINTERS];
+    unsigned int direct[DIRECT_POINTERS];
     /**
      * Apuntan a bloques de punteros. De nivel 1, nivel 2 y nivel 3 respectivamente.
      */
-    unsigned int indirectPointers[INDIRECT_POINTERS];
+    unsigned int indirect[INDIRECT_POINTERS];
 
     /**
      * Reservado.
      */
-    char _padding[INODE_SIZE - sizeof(struct Metadata) - POINTERS * sizeof(unsigned int)];
-};
+    char __padding[INODE_SIZE - sizeof(metadata_t) - POINTERS * sizeof(unsigned int)];
+} inode_t;
 
 /**
  * Calcular tamaño en bloques en función del número de bytes.
@@ -277,7 +280,7 @@ int free_block(unsigned int physical_block);
  *
  * @return 1 si se guardado correctamente la información. Puede devolver error.
  */
-int write_inode(unsigned int inode_position, struct INode *inode);
+int write_inode(unsigned int inode_position, inode_t *inode);
 
 /**
  * Leer i-nodo.
@@ -287,7 +290,7 @@ int write_inode(unsigned int inode_position, struct INode *inode);
  *
  * @return 1 si se ha leído correctamente. Puede devolver error.
  */
-int read_inode(unsigned int inode_position, struct INode *inode);
+int read_inode(unsigned int inode_position, inode_t *inode);
 
 /**
  * Reservar primer i-nodo libre.
@@ -318,7 +321,7 @@ int free_inode(unsigned int inode_position);
  *
  * @return Cantidad de bloques liberados. Puede devolver error.
  */
-int free_inode_blocks(unsigned int first_logical_block, struct INode *inode);
+int free_inode_blocks(unsigned int first_logical_block, inode_t *inode);
 
 /**
  * Obtener el bloque físico correspondiente al bloque lógico del i-nodo.
@@ -329,7 +332,15 @@ int free_inode_blocks(unsigned int first_logical_block, struct INode *inode);
  *
  * @return Puntero al bloque físico correspondiente al bloque lógico especificado. Puede devolver error.
  */
-int get_physical_block(struct INode *inode, unsigned int logical_block, unsigned char reserve);
+int get_physical_block(inode_t *inode, unsigned int logical_block, unsigned char reserve);
+
+/**
+ * Formatea dentro de 'str' el valor de 'time'
+ *
+ * @param str Cadena donde se va a realizar el formateo.
+ * @param time Tiemo que se quiere formatear.
+ */
+void format_datetime(char *str, const time_t *time);
 
 /**
  * Mostrar los metadatos de un i-nodo por pantalla.
@@ -339,7 +350,7 @@ int get_physical_block(struct INode *inode, unsigned int logical_block, unsigned
  *
  * @return 0.
  */
-int print_inode(struct Metadata *metadata, char *name);
+int print_inode(metadata_t *metadata, char *name);
 
 /**
  * Comprobar que los permisos son correctos. Los permisos son correctos si es un número entre 0 y 7.

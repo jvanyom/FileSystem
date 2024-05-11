@@ -1,7 +1,7 @@
 #include "files.h"
 
 int my_write_file(unsigned int inode_position, const void *buffer, unsigned int offset, unsigned int count) {
-    struct INode inode;
+    inode_t inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
     if ((inode.metadata.permissions & WRITE) == 0) return NO_WRITE_PERMISSIONS;
@@ -69,11 +69,11 @@ int my_write_file(unsigned int inode_position, const void *buffer, unsigned int 
 
     const unsigned int total_bytes = wrote_bytes + offset;
 
-    inode.metadata.dataModifiedAt = time(NULL);
+    inode.metadata.data_modified_at = time(NULL);
 
     if (inode.metadata.size < total_bytes) {
         inode.metadata.size = total_bytes;
-        inode.metadata.modifiedAt = inode.metadata.dataModifiedAt;
+        inode.metadata.modified_at = inode.metadata.data_modified_at;
     }
 
     if (write_inode(inode_position, &inode) < 0) return FAILURE;
@@ -82,7 +82,7 @@ int my_write_file(unsigned int inode_position, const void *buffer, unsigned int 
 }
 
 int my_read_file(unsigned int inode_position, void *buffer, unsigned int offset, unsigned int count) {
-    struct INode inode;
+    inode_t inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
     if ((inode.metadata.permissions & READ) == 0) return NO_READ_PERMISSIONS;
@@ -149,13 +149,13 @@ int my_read_file(unsigned int inode_position, void *buffer, unsigned int offset,
         read_bytes += bytes_to_read;
     }
 
-    inode.metadata.dataAccessedAt = time(NULL);
+    inode.metadata.data_accessed_at = time(NULL);
 
     return write_inode(inode_position, &inode) < 0 ? FAILURE : (int) read_bytes;
 }
 
-int my_stat_file(unsigned int inode_position, struct Metadata *metadata) {
-    struct INode inode;
+int my_stat_file(unsigned int inode_position, metadata_t *metadata) {
+    inode_t inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
     *metadata = inode.metadata;
@@ -164,11 +164,11 @@ int my_stat_file(unsigned int inode_position, struct Metadata *metadata) {
 }
 
 int my_chmod_file(unsigned int inode_position, unsigned char permissions) {
-    struct INode inode;
+    inode_t inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
     inode.metadata.permissions = permissions;
-    inode.metadata.modifiedAt = time(NULL);
+    inode.metadata.modified_at = time(NULL);
 
     if (write_inode(inode_position, &inode) < 0) return FAILURE;
 
@@ -176,7 +176,7 @@ int my_chmod_file(unsigned int inode_position, unsigned char permissions) {
 }
 
 int my_trunc_file(unsigned int inode_position, unsigned int count) {
-    struct INode inode;
+    inode_t inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
     if ((inode.metadata.permissions & WRITE) == 0) return NO_WRITE_PERMISSIONS;
@@ -184,13 +184,13 @@ int my_trunc_file(unsigned int inode_position, unsigned int count) {
 
     const unsigned int first_logical_block = count / BLOCK_SIZE + (count % BLOCK_SIZE > 0);
 
-    const signed int freed_blocks = free_inode_blocks(first_logical_block, &inode);
+    const int freed_blocks = free_inode_blocks(first_logical_block, &inode);
     if (freed_blocks < 0) return FAILURE;
 
-    inode.metadata.modifiedAt = time(NULL);
-    inode.metadata.dataModifiedAt = inode.metadata.modifiedAt;
+    inode.metadata.modified_at = time(NULL);
+    inode.metadata.data_modified_at = inode.metadata.modified_at;
     inode.metadata.size = count;
-    inode.metadata.busyBlocksCount -= freed_blocks;
+    inode.metadata.busy_blocks_count -= freed_blocks;
 
     if (write_inode(inode_position, &inode) < 0) return FAILURE;
 
