@@ -11,15 +11,8 @@ int main(int argc, char **argv) {
     if (access(argv[1], F_OK) != 0) return print_error(DEV_NOT_EXISTS, argv[1]);
     if (mount(argv[1]) < 0) return print_error(MOUNT, argv[1]);
 
-    const size_t count = strlen(argv[3]);
-
-    //obtenemos la ruta y comprobamos que no se refiera a un directorio
-//    if (argv[2][strlen(argv[2]) - 1] == '/') {
-//        fprintf(stderr, RED "Error: la ruta se corresponde a un directorio.\n" RESET);
-//        exit(-1);
-//    }
-
     int wrote_bytes = 0;
+    const size_t count = strlen(argv[3]);
 
     debug(1, "Longitud del texto: %zu", count);
 
@@ -28,12 +21,6 @@ int main(int argc, char **argv) {
     }
 
     debug(1, "Bytes escritos: %d", wrote_bytes);
-
-    /* Visualización del stat
-    mi_stat_f(ninodo, &stat);
-    printf("stat.tamEnBytesLog=%d\n",stat.tamEnBytesLog);
-    printf("stat.numBloquesOcupados=%d\n",stat.numBloquesOcupados);
-    */
 
     return umount() < 0 ? print_unexpected() : EXIT_SUCCESS;
 }

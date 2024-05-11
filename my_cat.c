@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
         read_bytes += current_read_bytes;
         offset += BUFFER_SIZE;
         memset(buffer, EMPTY_BYTE, BUFFER_SIZE);
-    };
+    }
 
     printf("%d bytes leídos\n", read_bytes);
 
