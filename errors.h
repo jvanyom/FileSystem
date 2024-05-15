@@ -7,8 +7,8 @@
 #define SUCCESS 0
 #define FAILURE (-1)
 
-#define NO_READ_PERMISSIONS (-2)
-#define NO_WRITE_PERMISSIONS (-3)
+#define NOT_READ_PERMISSIONS (-2)
+#define NOT_WRITE_PERMISSIONS (-3)
 #define NOT_VALID_PERMISSIONS (-4)
 #define MOUNT (-5)
 #define DEV_NOT_EXISTS (-6)
@@ -18,7 +18,8 @@
 #define FILE_ALREADY_EXISTS (-10)
 #define IS_FILE (-11)
 #define IS_NOT_FILE (-12)
-#define NOT_CREATED (-13)
+#define NOT_EMPTY_DIR (-13)
+#define NOT_CREATED (-14)
 
 #define RESET       "\x1b[0m"
 #define RED         "\x1b[31m"

@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     if (wrote_bytes < 0) return print_error(wrote_bytes);
 
-    printf("%d bytes escritos\n", wrote_bytes);
+    fprintf(stderr, "\n%d bytes escritos\n", wrote_bytes);
 
     return umount() < 0 ? print_unexpected() : EXIT_SUCCESS;
 }

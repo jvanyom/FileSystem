@@ -4,7 +4,7 @@ int my_write_file(unsigned int inode_position, const void *buffer, unsigned int 
     inode_t inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
-    if ((inode.metadata.permissions & WRITE) == 0) return NO_WRITE_PERMISSIONS;
+    if ((inode.metadata.permissions & WRITE) == 0) return NOT_WRITE_PERMISSIONS;
 
     unsigned int wrote_bytes = 0;
 
@@ -85,7 +85,7 @@ int my_read_file(unsigned int inode_position, void *buffer, unsigned int offset,
     inode_t inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
-    if ((inode.metadata.permissions & READ) == 0) return NO_READ_PERMISSIONS;
+    if ((inode.metadata.permissions & READ) == 0) return NOT_READ_PERMISSIONS;
 
     if (offset > inode.metadata.size) return 0;
     if (offset + count > inode.metadata.size) count = inode.metadata.size - offset;
@@ -107,17 +107,17 @@ int my_read_file(unsigned int inode_position, void *buffer, unsigned int offset,
         const unsigned int bytes_to_read = data_block_size == 0 ? count : first_block_remainder_size;
 
         const int first_physical_block = get_physical_block(&inode, first_logical_block, NO_RESERVE);
-        if (first_physical_block < 0) goto intermediate_blocks;
 
-        if (read_block(first_physical_block, block) < 0) return FAILURE;
+        if (first_physical_block >= 0) {
+            if (read_block(first_physical_block, block) < 0) return FAILURE;
 
-        memcpy(
-                buffer,
-                block + first_logical_block_offset,
-                bytes_to_read
-        );
+            memcpy(
+                    buffer,
+                    block + first_logical_block_offset,
+                    bytes_to_read
+            );
+        }
 
-        intermediate_blocks:
         read_bytes += bytes_to_read;
     }
 
@@ -135,17 +135,17 @@ int my_read_file(unsigned int inode_position, void *buffer, unsigned int offset,
         const unsigned int bytes_to_read = last_logical_block_size + 1;
 
         const int last_physical_block = get_physical_block(&inode, last_logical_block, NO_RESERVE);
-        if (last_physical_block < 0) goto sum_bytes;
 
-        if (read_block(last_physical_block, block) < 0) return FAILURE;
+        if (last_physical_block >= 0) {
+            if (read_block(last_physical_block, block) < 0) return FAILURE;
 
-        memcpy(
-                buffer + count - bytes_to_read,
-                block,
-                bytes_to_read
-        );
+            memcpy(
+                    buffer + count - bytes_to_read,
+                    block,
+                    bytes_to_read
+            );
+        }
 
-        sum_bytes:
         read_bytes += bytes_to_read;
     }
 
@@ -179,7 +179,7 @@ int my_trunc_file(unsigned int inode_position, unsigned int count) {
     inode_t inode;
     if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
-    if ((inode.metadata.permissions & WRITE) == 0) return NO_WRITE_PERMISSIONS;
+    if ((inode.metadata.permissions & WRITE) == 0) return NOT_WRITE_PERMISSIONS;
     if (inode.metadata.size < count) return FAILURE;
 
     const unsigned int first_logical_block = count / BLOCK_SIZE + (count % BLOCK_SIZE > 0);

@@ -10,7 +10,9 @@ void format_perms(unsigned char permissions, char *buffer) {
 }
 
 int print_entry(const metadata_t *m, const char *filename, const int is_extended) {
-    if (!is_extended) return printf("%s%s "RESET, m->type == INODE_DIR ? LIGHT_BLUE : EMPTY_STR, filename);
+    const char *color_type = m->type == INODE_DIR ? LIGHT_BLUE : EMPTY_STR;
+
+    if (!is_extended) return printf("%s%s "RESET, color_type, filename);
 
     const static char *entry_format = "%-4c %-8s %-19s %-8d %s%-s\n"RESET;
 
@@ -20,10 +22,7 @@ int print_entry(const metadata_t *m, const char *filename, const int is_extended
     char modified_at[DATETIME_LENGTH];
     format_datetime(modified_at, &m->modified_at);
 
-    return printf(
-            entry_format,
-            m->type, permissions, modified_at, m->size, m->type == INODE_DIR ? LIGHT_BLUE : EMPTY_STR, filename
-    );
+    return printf(entry_format, m->type, permissions, modified_at, m->size, color_type, filename);
 }
 
 void print_total_entries(unsigned long total_entries) {
@@ -55,11 +54,15 @@ int main(int argc, char **argv) {
     inode_t inode;
     if (read_inode(path_inode, &inode) < 0) return print_unexpected();
 
-    if ((inode.metadata.permissions & READ) == 0) return print_error(NO_READ_PERMISSIONS);
+    if ((inode.metadata.permissions & READ) == 0) return print_error(NOT_READ_PERMISSIONS);
 
     const unsigned int is_dir = inode.metadata.type == INODE_DIR;
 
-    if (is_dir) print_total_entries(inode.metadata.size / ENTRY_SIZE);
+    const unsigned long total_entries = inode.metadata.size / ENTRY_SIZE;
+
+    if (is_dir) print_total_entries(total_entries);
+    if (total_entries == 0) goto end;
+
     if (is_extended) print_header();
 
     if (!is_dir) {
@@ -80,6 +83,8 @@ int main(int argc, char **argv) {
 
     dentry_t entries[ENTRIES_PER_BLOCK];
 
+    inode_t dentry_inode;
+
     for (int block = 0; block < inode.metadata.busy_blocks_count; ++block) {
         const int read_bytes = my_read_file(
                 path_inode,
@@ -92,11 +97,14 @@ int main(int argc, char **argv) {
         if (read_bytes == 0) return EXIT_SUCCESS;
 
         for (int entry = 0; entry < read_bytes / ENTRY_SIZE; ++entry) {
-            if (read_inode(entries[entry].inode_position, &inode) < 0) return print_unexpected();
+            if (read_inode(entries[entry].inode_position, &dentry_inode) < 0) return print_unexpected();
 
-            print_entry(&inode.metadata, entries[entry].filename, is_extended);
+            print_entry(&dentry_inode.metadata, entries[entry].filename, is_extended);
         }
     }
 
+    if (!is_extended) printf("\n");
+
+    end:
     return umount() < 0 ? print_unexpected() : EXIT_SUCCESS;
 }

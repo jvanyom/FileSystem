@@ -96,8 +96,8 @@ int find_entry(const char *path, unsigned int *parent_inode_position, unsigned i
     if (bad_path) return FILE_NOT_EXISTS;
 
     if (parent_inode.metadata.type == INODE_FILE) return IS_FILE;
-    if ((parent_inode.metadata.permissions & READ) == 0) return NO_READ_PERMISSIONS;
-    if ((parent_inode.metadata.permissions & WRITE) == 0) return NO_WRITE_PERMISSIONS;
+    if ((parent_inode.metadata.permissions & READ) == 0) return NOT_READ_PERMISSIONS;
+    if ((parent_inode.metadata.permissions & WRITE) == 0) return NOT_WRITE_PERMISSIONS;
 
     int new_inode_position = reserve_inode(type, permissions);
     if (new_inode_position < 0) return new_inode_position;
@@ -191,4 +191,105 @@ int my_read(const char *path, void *buffer, unsigned int offset, unsigned int co
     if (inode.metadata.type != INODE_FILE) return IS_NOT_FILE;
 
     return my_read_file(inode_position, buffer, offset, count);
+}
+
+int read_entry(unsigned int parent_inode_position, unsigned int entry_position, dentry_t *buffer) {
+    return my_read_file(
+            parent_inode_position,
+            buffer,
+            ENTRY_SIZE * entry_position,
+            ENTRY_SIZE
+    );
+}
+
+int write_entry(unsigned int parent_inode_position, unsigned int entry_position, const dentry_t *buffer) {
+    return my_write_file(
+            parent_inode_position,
+            buffer,
+            ENTRY_SIZE * entry_position,
+            ENTRY_SIZE
+    );
+}
+
+int my_link(const char *target, const char *link) {
+    const int target_inode_position = get_inode(target, NULL, NULL);
+    if (target_inode_position < 0) return target_inode_position;
+
+    inode_t target_inode;
+    if (read_inode(target_inode_position, &target_inode) < 0) return FAILURE;
+    if ((target_inode.metadata.permissions & READ) == 0) return NOT_READ_PERMISSIONS;
+    if (target_inode.metadata.type != INODE_FILE) return IS_NOT_FILE;
+
+    const int link_inode_position = create_entry(link, RW, INODE_FILE);
+    if (link_inode_position < 0) return link_inode_position;
+
+    unsigned int parent_inode_position;
+    unsigned int entry_position;
+
+    const int error = get_inode(link, &parent_inode_position, &entry_position);
+    if (error < 0) return error;
+
+    dentry_t dentry;
+    const int read_bytes = read_entry(parent_inode_position, entry_position, &dentry);
+    if (read_bytes < 0) return read_bytes;
+
+    dentry.inode_position = target_inode_position;
+
+    const int wrote_bytes = write_entry(parent_inode_position, entry_position, &dentry);
+    if (wrote_bytes < 0) return wrote_bytes;
+
+    const int freed_inode = free_inode(link_inode_position);
+    if (freed_inode < 0) return freed_inode;
+
+    target_inode.metadata.links_count++;
+    target_inode.metadata.modified_at = time(NULL);
+
+    if (write_inode(target_inode_position, &target_inode) < 0) return FAILURE;
+
+    return SUCCESS;
+}
+
+int my_unlink(const char *path, unsigned char type) {
+    if (strcmp(path, ROOT) == 0) return NOT_WRITE_PERMISSIONS;
+
+    unsigned int parent_inode_position;
+    unsigned int entry_position;
+
+    const int inode_position = get_inode(path, &parent_inode_position, &entry_position);
+    if (inode_position < 0) return inode_position;
+
+    inode_t dentry_inode;
+    if (read_inode(inode_position, &dentry_inode) < 0) return FAILURE;
+
+    if (dentry_inode.metadata.type != type) return type == INODE_DIR ? IS_FILE : IS_NOT_FILE;
+    if (dentry_inode.metadata.type == INODE_DIR && dentry_inode.metadata.size > 0) return NOT_EMPTY_DIR;
+
+    inode_t parent_inode;
+    if (read_inode(parent_inode_position, &parent_inode) < 0) return FAILURE;
+
+    const unsigned int last_entry_position = (int) parent_inode.metadata.size / ENTRY_SIZE - 1;
+
+    if (entry_position < last_entry_position) {
+        dentry_t last_entry;
+        const int read_bytes = read_entry(parent_inode_position, last_entry_position, &last_entry);
+        if (read_bytes < 0) return read_bytes;
+
+        const int wrote_bytes = write_entry(parent_inode_position, entry_position, &last_entry);
+        if (wrote_bytes < 0) return wrote_bytes;
+    }
+
+    const int freed_blocks = my_trunc_file(parent_inode_position, parent_inode.metadata.size - ENTRY_SIZE);
+    if (freed_blocks < 0) return freed_blocks;
+
+    dentry_inode.metadata.links_count--;
+
+    if (dentry_inode.metadata.links_count == 0) {
+        const int freed_inode = free_inode(inode_position);
+        if (freed_inode < 0) return freed_inode;
+    } else {
+        dentry_inode.metadata.modified_at = time(NULL);
+        if (write_inode(inode_position, &dentry_inode) < 0) return FAILURE;
+    }
+
+    return SUCCESS;
 }

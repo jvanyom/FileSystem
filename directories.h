@@ -7,6 +7,7 @@
 
 #define EMPTY_STR ""
 #define SLASH_STR "/"
+#define ROOT SLASH_STR
 
 #define HYPHEN '-'
 
@@ -72,11 +73,33 @@ int my_stat(const char *path, metadata_t *metadata);
 int my_write(const char *path, const void *buffer, unsigned int offset, unsigned int count);
 
 /**
+ * Leer contenido de un fichero a partir de su ruta.
  *
- * @param path
- * @param buffer
- * @param offset
- * @param count
- * @return
+ * @param path Ruta del fichero.
+ * @param buffer Contenedor.
+ * @param offset Byte a partir del que se quiere leer.
+ * @param count Número de bytes a leer.
+ *
+ * @return Bytes leídos.
  */
 int my_read(const char *path, void *buffer, unsigned int offset, unsigned int count);
+
+/**
+ * Crear enlace de 'target' con el nombre 'link_name'
+ *
+ * @param target Archivo que se quiere enlazar.
+ * @param link Nombre del enlace
+ *
+ * @return 0. Puede devolver error.
+ */
+int my_link(const char *target, const char *link);
+
+/**
+ * Borrar entrada de directorio del fichero especificado.
+ *
+ * @param path Ruta del fichero del que se quiere borrar la entrada.
+ * @param type Tipo del fichero. INODE_FILE o INODE_DIR.
+ *
+ * @return 0. Puede devolver error.
+ */
+int my_unlink(const char *path, unsigned char type);

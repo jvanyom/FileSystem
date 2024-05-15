@@ -15,7 +15,7 @@
 
 #define CACHE FIFO
 
-#define DEBUG_CACHE 1
+#define DEBUG_CACHE 0
 
 typedef struct {
     int inode_position;

@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
         memset(buffer, EMPTY_BYTE, BUFFER_SIZE);
     }
 
-    printf("%d bytes leídos\n", read_bytes);
+    fprintf(stderr, "\n%d bytes leídos\n", read_bytes);
 
     return umount() < 0 ? print_unexpected() : EXIT_SUCCESS;
 }
