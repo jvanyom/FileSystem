@@ -14,6 +14,9 @@
 #define ENTRY_SIZE sizeof(dentry_t)
 #define ENTRIES_PER_BLOCK (BLOCK_SIZE / ENTRY_SIZE)
 
+#define RECURSIVE 1
+#define SIMPLE 0
+
 typedef struct {
     unsigned int inode_position;
     char filename[FILENAME_SIZE];
@@ -33,12 +36,13 @@ int get_inode(const char *path, unsigned int *parent_inode_position, unsigned in
  * Crea una entrada para la ruta especificada en el directorio padre.
  *
  * @param path Ruta del archivo del que se quiere crear una entrada.
+ * @param parent_inode_position Puntero al número del i-nodo padre.
  * @param permissions Permisos que se le asignarán inicialmente al archivo.
  * @param type Tipo de entrada que se quiere crear. INODE_DIR o INODE_FILE.
  *
  * @return Número del i-nodo creado. Puede devolver error.
  */
-int create_entry(const char *path, unsigned char permissions, unsigned char type);
+int create_entry(const char *path, unsigned int *parent_inode_position, unsigned char permissions, unsigned char type);
 
 /**
  * Cambiar los permisos de un archivo.
@@ -99,7 +103,38 @@ int my_link(const char *target, const char *link);
  *
  * @param path Ruta del fichero del que se quiere borrar la entrada.
  * @param type Tipo del fichero. INODE_FILE o INODE_DIR.
+ * @param mode Recursivo o simple. (RECURSIVE o SIMPLE)
  *
  * @return 0. Puede devolver error.
  */
-int my_unlink(const char *path, unsigned char type);
+int my_unlink(const char *path, unsigned char type, unsigned char mode);
+
+/**
+ * Renombrar fichero.
+ *
+ * @param path Ruta actual del fichero.
+ * @param new_name Nuevo nombre.
+ *
+ * @return Entero positivo. Puede devolver error.
+ */
+int my_rename(const char *path, const char *new_name);
+
+/**
+ * Mover un fichero o directorio a otro directorio.
+ *
+ * @param src_path Ruta del fichero o directorio a mover.
+ * @param dest_dir_path Directorio de destino.
+ *
+ * @return 0. Puede devolver error.
+ */
+int my_move(const char *src_path, const char *dest_dir_path);
+
+/**
+ * Copiar un fichero o directorio dentro de otro directorio.
+ *
+ * @param src_path Ruta del fichero o directorio a copiar.
+ * @param dest_dir_path Directorio de destino.
+ *
+ * @return
+ */
+int my_copy(const char *src_path, const char *dest_dir_path);

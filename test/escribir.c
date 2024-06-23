@@ -4,7 +4,7 @@ const static int offsets[] = {9000, 209000, 30725000, 409605000, 480000000};
 
 int main(int argc, char **argv) {
     if (argc != 4) return print_error(SYNTAX, argv[0], "<dispositivo> <datos> <número de i-nodos diferentes>");
-    if (mount(argv[1]) < 0) return print_error(MOUNT, argv[1]);
+    if (dev_mount(argv[1]) < 0) return print_error(MOUNT, argv[1]);
 
     const unsigned int inodes_num = strtol(argv[3], NULL, 10);
     if (errno == EINVAL) return print_error(NAN, "número de i-nodos diferentes");
@@ -41,5 +41,5 @@ int main(int argc, char **argv) {
         printf("--------------------------------------------------------\n");
     }
 
-    return umount() < 0 ? print_error(MOUNT, argv[1]) : EXIT_SUCCESS;
+    return dev_umount() < 0 ? print_error(MOUNT, argv[1]) : EXIT_SUCCESS;
 }

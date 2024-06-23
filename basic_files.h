@@ -51,7 +51,7 @@
 
 #define NUM_LEVELS 4
 
-#define DATETIME_FORMAT ("%Y-%m-%d %H:%M:%S")
+#define DATETIME_FORMAT ("%H:%M:%S %d/%m/%Y")
 #define DATETIME_LENGTH 20
 
 #define debug(d, fmt, ...) \

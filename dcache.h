@@ -3,7 +3,7 @@
 
 #include "errors.h"
 
-#define MAX_CACHE_SIZE 3 // 16
+#define MAX_CACHE_SIZE 3
 
 #define SLASH '/'
 #define EOL '\0'
@@ -13,7 +13,7 @@
 
 #define LRU_PREFIX MAGENTA"(LRU): "LIGHT_GRAY
 
-#define CACHE FIFO
+#define CACHE LRU
 
 #define DEBUG_CACHE 0
 

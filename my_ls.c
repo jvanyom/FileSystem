@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     const char *dev = argv[is_extended ? 2 : 1];
 
     if (access(dev, F_OK) != 0) return print_error(DEV_NOT_EXISTS, dev);
-    if (mount(dev) < 0) return print_error(MOUNT, dev);
+    if (dev_mount(dev) < 0) return print_error(MOUNT, dev);
 
     unsigned int parent_inode_position;
     unsigned int entry_position;
@@ -106,5 +106,5 @@ int main(int argc, char **argv) {
     if (!is_extended) printf("\n");
 
     end:
-    return umount() < 0 ? print_unexpected() : EXIT_SUCCESS;
+    return dev_umount() < 0 ? print_unexpected() : EXIT_SUCCESS;
 }

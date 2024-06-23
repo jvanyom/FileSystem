@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     if (errno == EINVAL) return print_error(NAN, "offset");
 
     if (access(argv[1], F_OK) != 0) return print_error(DEV_NOT_EXISTS, argv[1]);
-    if (mount(argv[1]) < 0) return print_error(MOUNT, argv[1]);
+    if (dev_mount(argv[1]) < 0) return print_error(MOUNT, argv[1]);
 
     const int wrote_bytes = my_write(argv[2], argv[3], offset, strlen(argv[3]));
 
@@ -15,5 +15,5 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "\n%d bytes escritos\n", wrote_bytes);
 
-    return umount() < 0 ? print_unexpected() : EXIT_SUCCESS;
+    return dev_umount() < 0 ? print_unexpected() : EXIT_SUCCESS;
 }

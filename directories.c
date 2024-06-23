@@ -150,7 +150,11 @@ int get_inode(const char *path, unsigned int *parent_inode_position, unsigned in
     return inode_position;
 }
 
-int create_entry(const char *path, unsigned char permissions, unsigned char type) {
+int create_entry(const char *path, unsigned int *parent_inode_position, unsigned char permissions, unsigned char type) {
+    if (parent_inode_position) {
+        return find_entry(path, parent_inode_position, NULL, CREATE, permissions, type);
+    }
+
     super_block_t sb;
     if (read_block(SUPER_BLOCK_POSITION, &sb) < 0) return FAILURE;
 
@@ -220,7 +224,7 @@ int my_link(const char *target, const char *link) {
     if ((target_inode.metadata.permissions & READ) == 0) return NOT_READ_PERMISSIONS;
     if (target_inode.metadata.type != INODE_FILE) return IS_NOT_FILE;
 
-    const int link_inode_position = create_entry(link, RW, INODE_FILE);
+    const int link_inode_position = create_entry(link, NULL, RW, INODE_FILE);
     if (link_inode_position < 0) return link_inode_position;
 
     unsigned int parent_inode_position;
@@ -249,20 +253,41 @@ int my_link(const char *target, const char *link) {
     return SUCCESS;
 }
 
-int my_unlink(const char *path, unsigned char type) {
-    if (strcmp(path, ROOT) == 0) return NOT_WRITE_PERMISSIONS;
+int my_recursive_unlink(unsigned int inode_position, unsigned int parent_inode_position,
+                        unsigned int entry_position, unsigned char type, unsigned char recursive) {
+    inode_t inode;
+    if (read_inode(inode_position, &inode) < 0) return FAILURE;
 
-    unsigned int parent_inode_position;
-    unsigned int entry_position;
+    if (inode.metadata.type != type) return type == INODE_DIR ? IS_FILE : IS_NOT_FILE;
+    if (!recursive && inode.metadata.type == INODE_DIR && inode.metadata.size > 0) return NOT_EMPTY_DIR;
 
-    const int inode_position = get_inode(path, &parent_inode_position, &entry_position);
-    if (inode_position < 0) return inode_position;
+    if (type == INODE_DIR && recursive) {
+        dentry_t entries[ENTRIES_PER_BLOCK];
 
-    inode_t dentry_inode;
-    if (read_inode(inode_position, &dentry_inode) < 0) return FAILURE;
+        for (int i = 0; i < inode.metadata.busy_blocks_count; ++i) {
+            int read_bytes = my_read_file(inode_position, entries, i * BLOCK_SIZE, BLOCK_SIZE);
+            if (read_bytes < 0) return read_bytes;
 
-    if (dentry_inode.metadata.type != type) return type == INODE_DIR ? IS_FILE : IS_NOT_FILE;
-    if (dentry_inode.metadata.type == INODE_DIR && dentry_inode.metadata.size > 0) return NOT_EMPTY_DIR;
+            const unsigned int current_block_entries_count = read_bytes / ENTRY_SIZE;
+
+            for (int e = 0; e < current_block_entries_count; ++e) {
+                dentry_t *dentry = entries + e;
+
+                inode_t recursive_dentry_inode;
+                if (read_inode(dentry->inode_position, &recursive_dentry_inode) < 0) return FAILURE;
+
+                const int error = my_recursive_unlink(
+                        dentry->inode_position,
+                        inode_position,
+                        e,
+                        recursive_dentry_inode.metadata.type,
+                        RECURSIVE
+                );
+
+                if (error < 0) return error;
+            }
+        }
+    }
 
     inode_t parent_inode;
     if (read_inode(parent_inode_position, &parent_inode) < 0) return FAILURE;
@@ -281,15 +306,230 @@ int my_unlink(const char *path, unsigned char type) {
     const int freed_blocks = my_trunc_file(parent_inode_position, parent_inode.metadata.size - ENTRY_SIZE);
     if (freed_blocks < 0) return freed_blocks;
 
-    dentry_inode.metadata.links_count--;
+    inode.metadata.links_count--;
 
-    if (dentry_inode.metadata.links_count == 0) {
+    if (inode.metadata.links_count == 0) {
         const int freed_inode = free_inode(inode_position);
         if (freed_inode < 0) return freed_inode;
     } else {
-        dentry_inode.metadata.modified_at = time(NULL);
-        if (write_inode(inode_position, &dentry_inode) < 0) return FAILURE;
+        inode.metadata.modified_at = time(NULL);
+        if (write_inode(inode_position, &inode) < 0) return FAILURE;
     }
 
     return SUCCESS;
+}
+
+int my_unlink(const char *path, unsigned char type, unsigned char recursive) {
+    if (strcmp(path, ROOT) == 0) return NOT_WRITE_PERMISSIONS;
+
+    unsigned int parent_inode_position;
+    unsigned int entry_position;
+
+    const int inode_position = get_inode(path, &parent_inode_position, &entry_position);
+    if (inode_position < 0) return inode_position;
+
+    return my_recursive_unlink(inode_position, parent_inode_position, entry_position, type, recursive);
+}
+
+int my_rename(const char *path, const char *new_name) {
+    unsigned int parent_inode_position;
+    unsigned int entry_position;
+
+    const int inode_position = get_inode(path, &parent_inode_position, &entry_position);
+    if (inode_position < 0) return inode_position;
+
+    const size_t length = strlen(new_name);
+    char new_name_path[length + 2];
+    new_name_path[0] = SLASH;
+    strcpy(new_name_path + 1, new_name);
+    new_name_path[length + 1] = EOL;
+
+    if (find_entry(new_name_path, &parent_inode_position, NULL, NO_CREATE, 0, 0) != FILE_NOT_EXISTS) {
+        return FILE_ALREADY_EXISTS;
+    }
+
+    inode_t inode;
+    if (read_inode(inode_position, &inode) < 0) return FAILURE;
+
+    const int last_char_is_slash = new_name[length - 1] == SLASH;
+
+    if (last_char_is_slash && inode.metadata.type != INODE_DIR) return IS_FILE;
+
+    if ((inode.metadata.permissions & WRITE) == 0) return NOT_WRITE_PERMISSIONS;
+    if ((inode.metadata.permissions & READ) == 0) return NOT_READ_PERMISSIONS;
+
+    dentry_t dentry = {0};
+    dentry.inode_position = inode_position;
+    strncpy(dentry.filename, new_name, last_char_is_slash ? length - 1 : length);
+
+    return write_entry(parent_inode_position, entry_position, &dentry);
+}
+
+int my_move(const char *src_path, const char *dest_dir_path) {
+    unsigned int src_parent_inode_position;
+    unsigned int src_entry_position;
+
+    const int src_inode_position = get_inode(
+            src_path,
+            &src_parent_inode_position, &src_entry_position
+    );
+
+    if (src_inode_position < 0) return src_inode_position;
+
+    const int dest_inode_position = get_inode(dest_dir_path, NULL, NULL);
+    if (dest_inode_position < 0) return dest_inode_position;
+
+    inode_t dest_inode;
+    if (read_inode(dest_inode_position, &dest_inode) < 0) return FAILURE;
+    if (dest_inode.metadata.type != INODE_DIR) return IS_FILE;
+
+    dentry_t src_dentry;
+    const int read_bytes = read_entry(src_parent_inode_position, src_entry_position, &src_dentry);
+    if (read_bytes < 0) return read_bytes;
+
+    inode_t src_parent_inode;
+    if (read_inode(src_parent_inode_position, &src_parent_inode)) return FAILURE;
+
+    const unsigned int last_entry_position = (int) src_parent_inode.metadata.size / ENTRY_SIZE - 1;
+
+    if (src_entry_position < last_entry_position) {
+        dentry_t last_entry;
+        const int err = read_entry(src_parent_inode_position, last_entry_position, &last_entry);
+        if (err < 0) return err;
+
+        const int wrote_bytes = write_entry(src_parent_inode_position, src_entry_position, &last_entry);
+        if (wrote_bytes < 0) return wrote_bytes;
+    }
+
+    const int freed_blocks = my_trunc_file(src_parent_inode_position, src_parent_inode.metadata.size - ENTRY_SIZE);
+    if (freed_blocks < 0) return freed_blocks;
+
+    return my_write_file(
+            dest_inode_position,
+            &src_dentry,
+            dest_inode.metadata.size,
+            ENTRY_SIZE
+    );
+}
+
+/**
+ * Obtener el último segmento de una ruta. El último segmento incluye la barra del principio y la del final si tiene.
+ *
+ * @param path Ruta.
+ *
+ * @return Último segmento. (strdup)
+ */
+const char *get_last_segment(const char *path) {
+    const char *last_slash = strrchr(path, SLASH);
+
+    if (!last_slash) return path;
+    if (*(last_slash + 1) != EOL) return last_slash;
+
+    char *src_path_without_slash = strdup(path);
+    const size_t length = strlen(path);
+
+    src_path_without_slash[length - 1] = EOL;
+    const char *segment = strchr(src_path_without_slash, SLASH);
+    src_path_without_slash[length - 1] = SLASH;
+
+    return segment;
+}
+
+int my_copy_file(const char *filename, unsigned int src_inode_position, inode_t *src_inode,
+                 unsigned int dest_inode_position) {
+
+    const int copy_inode_position = create_entry(
+            filename,
+            &dest_inode_position,
+            src_inode->metadata.permissions, src_inode->metadata.type
+    );
+
+    const char empty_buffer[BLOCK_SIZE] = {0};
+    char block[BLOCK_SIZE] = {0};
+
+    for (int i = 0, blocks_count = 0; blocks_count < src_inode->metadata.busy_blocks_count; ++i) {
+        memset(block, EMPTY_BYTE, BLOCK_SIZE);
+
+        int read_bytes = my_read_file(src_inode_position, block, i * BLOCK_SIZE, BLOCK_SIZE);
+        if (read_bytes < 0) return read_bytes;
+
+        if (read_bytes == 0 || memcmp(block, empty_buffer, BLOCK_SIZE) == 0) continue;
+
+        int wrote_bytes = my_write_file(copy_inode_position, block, i * BLOCK_SIZE, read_bytes);
+        if (wrote_bytes < 0) return wrote_bytes;
+        if (wrote_bytes > 0) blocks_count++;
+    }
+
+    return SUCCESS;
+}
+
+int my_copy_dir(const char *filename, unsigned int src_inode_position, inode_t *src_inode,
+                unsigned int dest_inode_position) {
+
+    const int copy_dir_inode_position = create_entry(
+            filename,
+            &dest_inode_position,
+            src_inode->metadata.permissions, src_inode->metadata.type
+    );
+
+    dentry_t entries[ENTRIES_PER_BLOCK] = {0};
+
+    for (int i = 0; i < src_inode->metadata.busy_blocks_count; ++i) {
+        int read_bytes = my_read_file(src_inode_position, entries, i * BLOCK_SIZE, BLOCK_SIZE);
+        if (read_bytes < 0) return read_bytes;
+
+        const unsigned int current_block_entries_count = read_bytes / ENTRY_SIZE;
+
+        for (int e = 0; e < current_block_entries_count; ++e) {
+            dentry_t *dentry = entries + e;
+
+            inode_t dentry_inode;
+            if (read_inode(dentry->inode_position, &dentry_inode) < 0) return FAILURE;
+
+            const size_t length = strlen(dentry->filename);
+            char dentry_filename[length + 2];
+            dentry_filename[0] = SLASH;
+            strcpy(dentry_filename + 1, dentry->filename);
+            dentry_filename[length + 1] = EOL;
+
+            const int error = dentry_inode.metadata.type == INODE_FILE ?
+                              my_copy_file(
+                                      dentry_filename,
+                                      dentry->inode_position,
+                                      &dentry_inode,
+                                      copy_dir_inode_position
+                              ) :
+                              my_copy_dir(
+                                      dentry_filename,
+                                      dentry->inode_position,
+                                      &dentry_inode,
+                                      copy_dir_inode_position
+                              );
+
+            if (error < 0) return error;
+        }
+    }
+
+    return SUCCESS;
+}
+
+int my_copy(const char *src_path, const char *dest_dir_path) {
+    const int src_inode_position = get_inode(src_path, NULL, NULL);
+    if (src_inode_position < 0) return src_inode_position;
+
+    const int dest_inode_position = get_inode(dest_dir_path, NULL, NULL);
+    if (dest_inode_position < 0) return dest_inode_position;
+
+    inode_t dest_inode;
+    if (read_inode(dest_inode_position, &dest_inode) < 0) return FAILURE;
+    if (dest_inode.metadata.type != INODE_DIR) return IS_FILE;
+
+    inode_t src_inode;
+    if (read_inode(src_inode_position, &src_inode) < 0) return FAILURE;
+
+    const char *filename = get_last_segment(src_path);
+
+    return src_inode.metadata.type == INODE_FILE
+           ? my_copy_file(filename, src_inode_position, &src_inode, dest_inode_position)
+           : my_copy_dir(filename, src_inode_position, &src_inode, dest_inode_position);
 }

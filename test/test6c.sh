@@ -1,20 +1,13 @@
 #!/bin/bash
 
-LIGHT_GREEN="\x1B[38;2;17;245;120m$"
-RESET="\x1b[0m"
-
-run() {
-  echo -e "\n################################################################################"
-  echo -e "$LIGHT_GREEN $1 $RESET"
-  eval "$1"
-}
+source trun.sh
 
 clear
 make clean
 make
 
-run "../my_mkfs disco 100000"
+trun "../my_mkfs disco 100000"
 
-run "./leer_sf disco"
-run "./escribir disco '$(cat text.txt)' 0"
-run "time ./truncar disco 1 0"
+trun "./leer_sf disco"
+trun "./escribir disco '$(cat text.txt)' 0"
+trun "time ./truncar disco 1 0"

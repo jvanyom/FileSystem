@@ -161,7 +161,7 @@ int print_find_entry(char *path, unsigned char create, unsigned char type) {
     printf("\n********************************************************************\n");
 
     const int inode_position = create
-                               ? create_entry(path, RW, type)
+                               ? create_entry(path, NULL, RW, type)
                                : get_inode(path, NULL, NULL);
 
     if (inode_position < 0) return print_error(inode_position);
@@ -188,7 +188,7 @@ int print_find_entries() {
 
 int main(int argc, char **argv) {
     if (argc != 2) return print_error(SYNTAX, argv[0], "<dispositivo>");
-    if (mount(argv[1]) < 0) return print_error(MOUNT, argv[1]);
+    if (dev_mount(argv[1]) < 0) return print_error(MOUNT, argv[1]);
 
     super_block_t sb;
 
@@ -214,5 +214,5 @@ int main(int argc, char **argv) {
     print_find_entries();
 #endif
 
-    return umount() < 0 ? print_error(MOUNT, argv[1]) : EXIT_SUCCESS;
+    return dev_umount() < 0 ? print_error(MOUNT, argv[1]) : EXIT_SUCCESS;
 }

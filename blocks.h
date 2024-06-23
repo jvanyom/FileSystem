@@ -3,10 +3,12 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/mman.h>
 
 #include "errors.h"
 
 #define BLOCK_SIZE 1024
+#define MMAP
 
 /**
  * Montar dispositivo.
@@ -15,14 +17,14 @@
  *
  * @return Descriptor del fichero abierto. Puede devolver error.
  */
-int mount(const char *path);
+int dev_mount(const char *path);
 
 /**
  * Desmontar dispositivo.
  *
  * @return 1 si se ha cerrado correctament. Puede devolver error.
  */
-int umount();
+int dev_umount();
 
 /**
  * Escribir bloque físico en el dispositivo.
