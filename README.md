@@ -1,128 +1,128 @@
 # FileSystem
 
-Sistema de archivos escrito en C e inspirado en conceptos de ext2. Utiliza un archivo ordinario como dispositivo de almacenamiento: dentro de él guarda sus propios metadatos, directorios y contenidos. Las herramientas de línea de comandos permiten formatear ese disco virtual y trabajar con los archivos que contiene.
+A file system written in C and inspired by ext2 concepts. It uses a regular file as a storage device, keeping its own metadata, directories, and file contents inside it. The command-line tools let you format this virtual disk and manage the files it contains.
 
-El proyecto permite estudiar cómo se relacionan las operaciones sobre rutas con la gestión de inodos y bloques. Implementa un formato propio; las imágenes generadas no son imágenes ext2 compatibles con las herramientas del sistema operativo, ni se montan como un sistema de archivos del kernel.
+The project shows how operations on file paths connect to inode and block management. It uses its own storage format: the generated images are not compatible with standard ext2 tools and cannot be mounted as a kernel file system.
 
-## Funcionalidades
+## Features
 
-- Creación de discos virtuales, archivos y directorios.
-- Lectura y escritura a partir de un desplazamiento en bytes, con reserva de bloques según se necesitan.
-- Consulta de metadatos: tipo, permisos, tamaño lógico, bloques ocupados, número de enlaces y fechas de acceso y modificación.
-- Cambio de permisos, enlaces duros entre archivos y eliminación de entradas.
-- Renombrado, movimiento, copia de archivos y directorios, y eliminación recursiva de directorios.
-- Truncado de archivos mediante la API de inodos y la utilidad de prueba correspondiente.
-- Caché de rutas a inodos, con implementaciones FIFO y LRU; la configuración incluida utiliza LRU y un máximo de tres entradas por proceso.
+- Create virtual disks, files, and directories.
+- Read and write data at a given byte offset, allocating blocks as needed.
+- Inspect metadata, including type, permissions, logical size, allocated blocks, link count, and access and modification times.
+- Change permissions, create hard links to files, and remove directory entries.
+- Rename, move, and copy files and directories, and remove directories recursively.
+- Truncate files through the inode API and the corresponding test utility.
+- Cache path-to-inode lookups using FIFO or LRU. The current configuration uses LRU with up to three entries per process.
 
-## Organización del código
+## Code structure
 
-| Archivos | Responsabilidad |
+| Files | Purpose |
 | --- | --- |
-| `blocks.c`, `blocks.h` | Apertura y cierre del dispositivo, y lectura y escritura de bloques físicos. La configuración actual utiliza `mmap`; también hay una alternativa con `lseek`, `read` y `write`. |
-| `basic_files.c`, `basic_files.h` | Superbloque, mapa de bits, reserva y liberación de bloques e inodos, y traducción de bloques lógicos a físicos. |
-| `files.c`, `files.h` | Operaciones sobre inodos: lectura, escritura, metadatos, permisos y truncado. |
-| `directories.c`, `directories.h` | Resolución de rutas, entradas de directorio, enlaces y operaciones sobre archivos y directorios. |
-| `dcache.c`, `dcache.h` | Caché en memoria para búsquedas de rutas. |
-| `errors.c`, `errors.h` | Códigos de error y mensajes de diagnóstico. |
-| `my_*.c` | Programas de línea de comandos que exponen las operaciones del sistema de archivos. |
-| `test/` | Makefile, utilidades de inspección y scripts con escenarios de prueba. |
+| `blocks.c`, `blocks.h` | Open and close the device, and read and write physical blocks. The current configuration uses `mmap`; an alternative implementation uses `lseek`, `read`, and `write`. |
+| `basic_files.c`, `basic_files.h` | Manage the superblock and bitmap, allocate and release blocks and inodes, and map logical blocks to physical blocks. |
+| `files.c`, `files.h` | Provide inode operations for reading, writing, metadata access, permission changes, and truncation. |
+| `directories.c`, `directories.h` | Resolve paths, manage directory entries and links, and perform file and directory operations. |
+| `dcache.c`, `dcache.h` | Maintain an in-memory cache for path lookups. |
+| `errors.c`, `errors.h` | Define error codes and diagnostic messages. |
+| `my_*.c` | Provide command-line programs for file system operations. |
+| `test/` | Contains the Makefile, inspection utilities, and scripts for test scenarios. |
 
-### Estructura del disco virtual
+### Virtual disk layout
 
-El archivo que representa el disco se divide en bloques de **1024 bytes**:
+The file that represents the disk is divided into **1024-byte blocks**:
 
 ```text
-Superbloque | Mapa de bits | Tabla de inodos | Bloques de datos
+Superblock | Bitmap | Inode table | Data blocks
 ```
 
-El superbloque registra la ubicación de las zonas, los contadores de espacio libre y el inodo raíz. El mapa de bits indica qué bloques están ocupados. Los inodos tienen un tamaño definido de **128 bytes** y contienen metadatos, **12 punteros directos** y tres punteros indirectos: simple, doble y triple.
+The superblock stores the location of each region, free space counters, and the root inode. The bitmap tracks which blocks are in use. Inodes have a defined size of **128 bytes** and contain metadata, **12 direct pointers**, and three indirect pointers for single, double, and triple indirection.
 
-Los directorios almacenan entradas que relacionan un nombre con un número de inodo. Al formatear, se reserva una cantidad de inodos equivalente a la cuarta parte del número de bloques y se crea el directorio raíz `/`.
+Directories store entries that associate a name with an inode number. Formatting reserves one inode for every four disk blocks and creates the root directory `/`.
 
-## Compilación
+## Building
 
-Se necesita un entorno Linux/POSIX con **GCC**, **GNU Make** y **Bash**. El Makefile utiliza C con extensiones GNU (`-std=gnu99`). En Windows puede utilizarse una distribución Linux mediante WSL con esas herramientas instaladas.
+You need a Linux/POSIX environment with **GCC**, **GNU Make**, and **Bash**. The Makefile uses C with GNU extensions (`-std=gnu99`). On Windows, you can use a Linux distribution through WSL with these tools installed.
 
-Desde la raíz del repositorio:
+From the repository root, run:
 
 ```bash
 make -C test
 ```
 
-Los ejecutables `my_*` se generan en la raíz y las utilidades auxiliares en `test/`.
+The `my_*` executables are created in the repository root, while the supporting utilities are created in `test/`.
 
-También se incluye `bash build.sh`, que limpia y recompila ocultando la salida estándar. Para ver los mensajes de compilación, utiliza directamente el comando anterior. La regla `clean` elimina además imágenes cuyos nombres coinciden con `disco*` en la raíz y en `test/`, y con `ext*` dentro de `test/`.
+The repository also includes `bash build.sh`, which cleans and rebuilds the project while hiding standard output. Use the command above to see the build messages directly. The `clean` target also removes disk images matching `disco*` in the root and `test/` directories, and files matching `ext*` inside `test/`.
 
-## Ejemplo de uso
+## Usage example
 
-Ejecuta los siguientes comandos desde la raíz del repositorio. `disco_demo` es el archivo del sistema anfitrión que contendrá el disco virtual; `/documentos/nota.txt` es una ruta interna de ese disco.
+Run the following commands from the repository root. `demo_disk` is the file on the host system that holds the virtual disk; `/documents/note.txt` is a path inside that disk.
 
 ```bash
-# Crear y formatear un disco de 100000 bloques (102400000 bytes).
-./my_mkfs disco_demo 100000
+# Create and format a disk with 100000 blocks (102400000 bytes).
+./my_mkfs demo_disk 100000
 
-# Crear un directorio y un archivo con permisos de lectura y escritura.
-./my_mkdir disco_demo 6 /documentos/
-./my_touch disco_demo 6 /documentos/nota.txt
+# Create a directory and a file with read and write permissions.
+./my_mkdir demo_disk 6 /documents/
+./my_touch demo_disk 6 /documents/note.txt
 
-# Escribir desde el byte 0 y recuperar el contenido.
-./my_write disco_demo /documentos/nota.txt "Hola, FileSystem" 0
-./my_cat disco_demo /documentos/nota.txt
+# Write from byte 0 and read the contents back.
+./my_write demo_disk /documents/note.txt "Hello, FileSystem" 0
+./my_cat demo_disk /documents/note.txt
 
-# Consultar el directorio y los metadatos del archivo.
-./my_ls -l disco_demo /documentos/
-./my_stat disco_demo /documentos/nota.txt
+# List the directory and inspect the file metadata.
+./my_ls -l demo_disk /documents/
+./my_stat demo_disk /documents/note.txt
 
-# Crear un segundo nombre para el mismo inodo.
-./my_link disco_demo /documentos/nota.txt /documentos/enlace.txt
+# Create a second name for the same inode.
+./my_link demo_disk /documents/note.txt /documents/link.txt
 
-# Eliminar el enlace, el archivo original y el directorio vacío.
-./my_rm disco_demo /documentos/enlace.txt
-./my_rm disco_demo /documentos/nota.txt
-./my_rmdir disco_demo /documentos/
+# Remove the link, the original file, and the empty directory.
+./my_rm demo_disk /documents/link.txt
+./my_rm demo_disk /documents/note.txt
+./my_rmdir demo_disk /documents/
 ```
 
-`my_mkfs` sobrescribe el archivo indicado al formatear. Utiliza una imagen de prueba. Los directorios padre deben existir antes de crear sus entradas y las rutas internas deben ser absolutas, comenzando por `/`.
+`my_mkfs` overwrites the specified file when formatting, so use a test image. Parent directories must exist before you create entries inside them. Internal paths must be absolute, starting with `/`.
 
-Los permisos son un único número de **0 a 7** que combina lectura (`4`), escritura (`2`) y ejecución (`1`): por ejemplo, `6` representa lectura y escritura. No hay permisos separados para propietario, grupo y otros. El bit de ejecución se almacena y se muestra, pero no implementa la ejecución de programas.
+Permissions are represented by a single number from **0 to 7**, combining read (`4`), write (`2`), and execute (`1`). For example, `6` grants read and write access. There are no separate permission sets for owner, group, and others. The execute bit is stored and displayed, but the project does not implement program execution.
 
-## Comandos disponibles
+## Available commands
 
-En esta tabla, `disco` es la imagen del sistema de archivos. Los argumentos que representan rutas de archivos o directorios pertenecen a esa imagen.
+In this table, `disk` refers to the file system image. File and directory path arguments refer to locations inside that image.
 
-| Sintaxis | Operación |
+| Syntax | Operation |
 | --- | --- |
-| `./my_mkfs disco bloques` | Crear y formatear el disco virtual. |
-| `./my_mkdir disco permisos /directorio/` | Crear un directorio. |
-| `./my_touch disco permisos /archivo` | Crear un archivo nuevo. |
-| `./my_write disco /archivo "texto" offset` | Escribir texto desde el desplazamiento indicado, en bytes. |
-| `./my_cat disco /archivo` | Mostrar el contenido del archivo. |
-| `./my_ls [-l] disco /ruta` | Listar entradas; `-l` añade metadatos. |
-| `./my_stat disco /ruta` | Mostrar el número de inodo y sus metadatos. |
-| `./my_chmod disco permisos /ruta` | Cambiar los permisos. |
-| `./my_link disco /archivo /enlace` | Crear un enlace duro a un archivo existente. |
-| `./my_rn disco /ruta nuevo_nombre` | Cambiar el nombre dentro del mismo directorio. |
-| `./my_mv disco /origen /destino/` | Mover una entrada a un directorio existente. |
-| `./my_cp disco /origen /destino/` | Copiar un archivo o un directorio y su contenido a un directorio existente. |
-| `./my_rm disco /archivo` | Eliminar una entrada de archivo y liberar su inodo cuando ya no tenga enlaces. |
-| `./my_rm -r disco /directorio/` | Eliminar un directorio y su contenido recursivamente. |
-| `./my_rmdir disco /directorio/` | Eliminar un directorio vacío. |
+| `./my_mkfs disk blocks` | Create and format the virtual disk. |
+| `./my_mkdir disk permissions /directory/` | Create a directory. |
+| `./my_touch disk permissions /file` | Create a new file. |
+| `./my_write disk /file "text" offset` | Write text at the specified byte offset. |
+| `./my_cat disk /file` | Display the file contents. |
+| `./my_ls [-l] disk /path` | List entries; `-l` includes metadata. |
+| `./my_stat disk /path` | Display the inode number and its metadata. |
+| `./my_chmod disk permissions /path` | Change permissions. |
+| `./my_link disk /file /link` | Create a hard link to an existing file. |
+| `./my_rn disk /path new_name` | Rename an entry within its current directory. |
+| `./my_mv disk /source /destination/` | Move an entry to an existing directory. |
+| `./my_cp disk /source /destination/` | Copy a file or a directory and its contents into an existing directory. |
+| `./my_rm disk /file` | Remove a file entry and release its inode when no links remain. |
+| `./my_rm -r disk /directory/` | Remove a directory and its contents recursively. |
+| `./my_rmdir disk /directory/` | Remove an empty directory. |
 
-Las opciones `-l` y `-r` se escriben **antes del nombre del disco**. `my_rn` recibe un nombre nuevo; `my_mv` y `my_cp` reciben un directorio de destino.
+The `-l` and `-r` options must appear **before the disk name**. `my_rn` takes a new name, while `my_mv` and `my_cp` take a destination directory.
 
-## Pruebas e inspección
+## Testing and inspection
 
-La carpeta `test/` incluye programas para examinar el superbloque (`leer_sf`), leer y escribir por inodo, modificar permisos, truncar y ejercitar la caché. También contiene escenarios para enlaces, copias, movimientos, renombrado y eliminación recursiva.
+The `test/` directory includes programs for inspecting the superblock (`leer_sf`), reading and writing by inode, changing permissions, truncating files, and exercising the cache. It also contains scenarios for links, copies, moves, renaming, and recursive removal.
 
-Los scripts usan rutas relativas y deben ejecutarse desde `test/`. Por ejemplo:
+The scripts use relative paths and must be run from `test/`. For example:
 
 ```bash
 cd test
 bash test10.sh
 ```
 
-`test10.sh` recompila, crea una imagen llamada `disco` y muestra operaciones sobre enlaces y eliminación de entradas, incluidos casos que provocan errores intencionadamente. Los scripts sirven para inspeccionar el comportamiento; su salida debe revisarse y no constituye por sí sola una batería de comprobaciones automáticas. Varios scripts ejecutan `make clean` y vuelven a crear las imágenes de prueba.
+`test10.sh` rebuilds the project, creates an image named `disco`, and demonstrates link and entry removal operations, including cases that intentionally produce errors. These scripts support manual inspection: their output needs to be reviewed, and they do not constitute a fully automated test suite. Several scripts run `make clean` and recreate the test images.
 
-## Alcance
+## Scope
 
-El formato persiste estructuras de C directamente, por lo que depende de la representación de tipos y de la arquitectura utilizada. No incorpora un mecanismo de journaling ni sincronización para operaciones concurrentes entre procesos. Está orientado a explorar la implementación de un sistema de archivos mediante imágenes de prueba.
+The storage format writes C structures directly to disk, so it depends on the representation of data types and the architecture in use. It does not include journaling or synchronization for concurrent operations across processes. The project is intended for exploring file system implementation with test images.
